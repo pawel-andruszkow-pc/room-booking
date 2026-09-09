@@ -56,6 +56,48 @@ const panelMotion = {
   transition: { duration: 0.3, ease: 'easeOut' as const },
 };
 
+/**
+ * State panels only cross-fade; the headline carries the movement. The
+ * outgoing word sinks and fades, the incoming one drops in from above while
+ * the background colour crosses from green to orange (see `bg` transition).
+ *
+ * The `custom` value is `true` when the change came from a tap on this tablet
+ * (see RoomStore.changedByUser): then everything switches instantly, because
+ * the person is looking at the button they just pressed, not at the headline.
+ */
+const fade = (instant: boolean) => ({ duration: instant ? 0 : 0.35, ease: 'easeInOut' as const });
+const statePanelVariants = {
+  initial: { opacity: 0 },
+  animate: (instant: boolean) => ({ opacity: 1, transition: fade(instant) }),
+  exit: (instant: boolean) => ({ opacity: 0, transition: fade(instant) }),
+};
+const headlineVariants = {
+  initial: (instant: boolean) => (instant ? { opacity: 1, y: 0 } : { opacity: 0, y: '-40%' }),
+  animate: (instant: boolean) => ({
+    opacity: 1,
+    y: 0,
+    transition: { duration: instant ? 0 : 0.4, ease: 'easeInOut' as const },
+  }),
+  exit: (instant: boolean) =>
+    instant
+      ? { opacity: 0, transition: { duration: 0 } }
+      : { opacity: 0, y: '40%', transition: { duration: 0.4, ease: 'easeInOut' as const } },
+};
+const stateMotion = (instant: boolean) => ({
+  variants: statePanelVariants,
+  initial: 'initial',
+  animate: 'animate',
+  exit: 'exit',
+  custom: instant,
+});
+const headlineMotion = (instant: boolean) => ({
+  variants: headlineVariants,
+  initial: 'initial',
+  animate: 'animate',
+  exit: 'exit',
+  custom: instant,
+});
+
 /** The kiosk screen: one room, its state, and the actions that make sense right now. */
 export const RoomPage = observer(function RoomPage() {
   const { auth, device, room, toast } = useStores();
@@ -94,6 +136,9 @@ export const RoomPage = observer(function RoomPage() {
   const tz = room.timezone;
   const bg =
     !status ? 'bg-ink' : state === 'free' ? 'bg-free' : 'bg-busy';
+  // A tap on this tablet switches the screen instantly; only changes that
+  // arrive from the clock or the calendar get the free/busy animation.
+  const instant = room.changedByUser;
 
   // Actions are optimistic (see RoomStore): the screen flips immediately, so
   // feedback is shown right away and only a failure (with rollback) interrupts.
@@ -103,7 +148,7 @@ export const RoomPage = observer(function RoomPage() {
   };
 
   return (
-    <div className={cn('relative h-full overflow-hidden transition-colors duration-700 ease-in-out', bg)}>
+    <div className={cn('relative h-full overflow-hidden transition-colors duration-[900ms] ease-in-out', bg)}>
       {/* Depth without repaint cost: static radial gradient overlay. */}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_90%_at_10%_0%,rgba(255,255,255,0.18),transparent_55%),radial-gradient(90%_80%_at_100%_100%,rgba(0,0,0,0.22),transparent_60%)]" />
 
@@ -144,19 +189,26 @@ export const RoomPage = observer(function RoomPage() {
           {/* Loading placeholder lives outside AnimatePresence so the first real
               state appears immediately instead of waiting for an exit animation. */}
           {!status && (
-            <div className="flex items-center gap-4 text-3xl text-white/70">
-              <Spinner className="h-8 w-8" /> Loading room…
+            <div className="space-y-6">
+              <div className="flex items-center gap-8 text-5xl font-semibold text-white/70">
+                <Spinner className="h-20 w-20 text-white/80" /> Loading room…
+              </div>
+              {room.error && (
+                <p className="max-w-3xl text-2xl leading-snug text-rose-300/90">{room.error}</p>
+              )}
             </div>
           )}
-          <AnimatePresence mode="wait" initial={false}>
+          <AnimatePresence mode="wait" initial={false} custom={instant}>
             {!status ? null : state === 'free' ? (
               <motion.div
                 key="free"
-                {...panelMotion}
+                {...stateMotion(instant)}
                 className={splitClass}
               >
                 <div className={splitLeftClass}>
-                  <h1 className={headlineClass}>Free</h1>
+                  <motion.h1 {...headlineMotion(instant)} className={headlineClass}>
+                    Free
+                  </motion.h1>
                 </div>
                 {room.next ? (
                   <DetailPanel
@@ -183,12 +235,14 @@ export const RoomPage = observer(function RoomPage() {
               </motion.div>
             ) : state === 'awaiting-check-in' && room.current ? (
               <motion.div
-                key={`check-${room.current.id}`}
-                {...panelMotion}
+                key="check"
+                {...stateMotion(instant)}
                 className={splitClass}
               >
                 <div className={splitLeftClass}>
-                  <h1 className={headlineClass}>Busy</h1>
+                  <motion.h1 {...headlineMotion(instant)} className={headlineClass}>
+                    Busy
+                  </motion.h1>
                 </div>
                 <div className={splitRightClass}>
                   <p className="text-[clamp(1.5rem,2.4vw,2.875rem)] font-bold leading-tight">
@@ -221,18 +275,25 @@ export const RoomPage = observer(function RoomPage() {
               </motion.div>
             ) : room.current ? (
               <motion.div
-                key={`busy-${room.current.id}`}
-                {...panelMotion}
+                key="busy"
+                {...stateMotion(instant)}
                 className={splitClass}
               >
                 <div className={splitLeftClass}>
-                  <h1 className={headlineClass}>Busy</h1>
+                  <motion.h1 {...headlineMotion(instant)} className={headlineClass}>
+                    Busy
+                  </motion.h1>
                 </div>
                 <DetailPanel
                   icon={Timer}
                   label="Free in"
-                  value={formatDuration(room.minutesUntilCurrentEnds ?? 0)}
-                  at={formatTime(room.current.end, tz)}
+                  value={formatDuration(room.minutesUntilFree ?? 0)}
+                  at={formatTime(room.busyUntil ?? room.current.end, tz)}
+                  note={
+                    room.followingMeeting
+                      ? `Then “${room.followingMeeting.title}” at ${formatTime(room.followingMeeting.start, tz)}`
+                      : undefined
+                  }
                 />
               </motion.div>
             ) : null}
@@ -290,7 +351,7 @@ export const RoomPage = observer(function RoomPage() {
                   onConfirmingChange={setConfirmEnd}
                   onConfirm={() => {
                     setConfirmEnd(false);
-                    act(room.endMeeting, 'Meeting ended');
+                    act(room.endMeeting);
                   }}
                 />
               </motion.div>
@@ -311,11 +372,14 @@ function DetailPanel({
   label,
   value,
   at,
+  note,
 }: {
   icon: LucideIcon;
   label: string;
   value: string;
   at: string;
+  /** Small trailing line, e.g. the meeting that follows without a break. */
+  note?: string;
 }) {
   return (
     <div className={splitRightClass}>
@@ -329,6 +393,11 @@ function DetailPanel({
       <div className="tabular mt-[clamp(0.5rem,0.8vw,1rem)] text-[clamp(1.75rem,2.8vw,3.25rem)] font-semibold text-white/90">
         at {at}
       </div>
+      {note && (
+        <div className="mt-[clamp(0.5rem,0.8vw,1rem)] truncate text-[clamp(1.1rem,1.6vw,1.75rem)] text-white/70">
+          {note}
+        </div>
+      )}
     </div>
   );
 }

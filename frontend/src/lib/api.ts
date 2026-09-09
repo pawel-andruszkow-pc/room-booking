@@ -73,6 +73,8 @@ export const api = {
   calendar: {
     provider: () => request<CalendarProviderInfo>('/calendar/provider'),
     calendars: () => request<CalendarSummary[]>('/calendar/calendars'),
+    addCalendar: (calendarId: string) =>
+      request<CalendarSummary>('/calendar/calendars', { method: 'POST', body: { calendarId } }),
     test: (calendarId: string) =>
       request<ConnectionTestResult>('/calendar/test', { method: 'POST', body: { calendarId } }),
     createLocalEvent: (body: { calendarId: string; title: string; start: string; end: string }) =>

@@ -48,6 +48,13 @@ export interface CalendarSummary {
 export interface CalendarProvider {
   readonly name: CalendarSource;
   listCalendars(): Promise<CalendarSummary[]>;
+  /**
+   * Makes a calendar the credentials already have access to show up in
+   * {@link listCalendars}. Google never lists a calendar merely shared with a
+   * service account (nobody accepts the invitation), so the admin pastes the
+   * id once and this subscribes the account to it.
+   */
+  addCalendar(calendarId: string): Promise<CalendarSummary>;
   listEvents(calendarId: string, from: Date, to: Date): Promise<CalendarEvent[]>;
   createEvent(calendarId: string, input: CreateEventInput): Promise<CalendarEvent>;
   /**

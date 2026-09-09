@@ -3,27 +3,51 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   HttpCode,
   Post,
 } from '@nestjs/common';
 import { appConfig } from '../config/app-config';
+import { Public } from '../common/public.decorator';
 import { RequirePin } from '../common/require-pin.decorator';
 import { CalendarService } from './calendar.service';
+import {
+  GOOGLE_WEBHOOK_ROUTE,
+  GoogleNotificationHeaders,
+  GoogleWatchService,
+} from './google-watch.service';
+import { AddCalendarDto } from './dto/add-calendar.dto';
 import { CreateLocalEventDto } from './dto/create-local-event.dto';
 import { TestCalendarDto } from './dto/test-calendar.dto';
 
 @Controller('calendar')
 export class CalendarController {
-  constructor(private readonly calendar: CalendarService) {}
+  constructor(
+    private readonly calendar: CalendarService,
+    private readonly watch: GoogleWatchService,
+  ) {}
 
-  /** Which backend is active and which service account to share calendars with. */
+  /** Which backend is active, which service account to share calendars with, push status. */
   @Get('provider')
-  provider() {
+  async provider() {
     return {
       provider: this.calendar.name,
       serviceAccountEmail: appConfig().calendar.google.serviceAccountEmail,
       impersonatedUser: appConfig().calendar.google.impersonateUser,
+      push: await this.watch.status(),
     };
+  }
+
+  /**
+   * Google Calendar push notifications. Google cannot send our Basic
+   * credentials, so the route is public and authenticated by the per-channel
+   * secret token instead (see GoogleWatchService). The body is always empty.
+   */
+  @Public()
+  @Post(GOOGLE_WEBHOOK_ROUTE)
+  @HttpCode(204)
+  async googleWebhook(@Headers() headers: GoogleNotificationHeaders): Promise<void> {
+    await this.watch.handleNotification(headers);
   }
 
   /** Calendars visible to the credentials — lets the admin import Workspace room resources. */
@@ -31,6 +55,16 @@ export class CalendarController {
   @RequirePin('admin')
   calendars() {
     return this.calendar.listCalendars();
+  }
+
+  /**
+   * Subscribes the credentials to a calendar by id so it appears in `calendars`.
+   * Needed once per Google calendar: sharing alone never lists it for a service account.
+   */
+  @Post('calendars')
+  @RequirePin('admin')
+  addCalendar(@Body() dto: AddCalendarDto) {
+    return this.calendar.addCalendar(dto.calendarId.trim());
   }
 
   /** Verify the backend can read a calendar (admin page "Test connection"). */

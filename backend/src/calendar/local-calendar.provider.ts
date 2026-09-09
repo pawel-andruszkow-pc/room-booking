@@ -25,6 +25,18 @@ export class LocalCalendarProvider implements CalendarProvider {
   ) {}
 
   /** Every calendar id that has at least one local event. */
+  /** Any id is a valid local calendar; nothing to subscribe to. */
+  async addCalendar(calendarId: string): Promise<CalendarSummary> {
+    return {
+      id: calendarId,
+      summary: calendarId,
+      description: null,
+      location: null,
+      capacity: parseCapacity(calendarId),
+      canWrite: true,
+    };
+  }
+
   async listCalendars(): Promise<CalendarSummary[]> {
     const rows = await this.events
       .createQueryBuilder('e')

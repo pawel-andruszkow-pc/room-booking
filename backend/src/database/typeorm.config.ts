@@ -6,6 +6,7 @@ import { Device } from '../devices/device.entity';
 import { AppSettings } from '../settings/app-settings.entity';
 import { LocalEvent } from '../calendar/local-event.entity';
 import { CheckIn } from '../bookings/check-in.entity';
+import { CalendarWatch } from '../calendar/calendar-watch.entity';
 
 /**
  * Single source of truth for the database connection, shared by the NestJS
@@ -23,7 +24,7 @@ export function buildDataSourceOptions(): DataSourceOptions {
   return {
     type: 'postgres',
     url: appConfig().databaseUrl,
-    entities: [Room, Device, AppSettings, LocalEvent, CheckIn],
+    entities: [Room, Device, AppSettings, LocalEvent, CheckIn, CalendarWatch],
     // Matches both compiled (.js) and ts-node (.ts) runs.
     migrations: [join(__dirname, 'migrations', '*{.ts,.js}')],
     migrationsTableName: 'migrations',

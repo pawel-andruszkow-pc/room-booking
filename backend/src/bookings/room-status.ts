@@ -31,6 +31,12 @@ export interface RoomStatus {
   state: RoomState;
   current: CalendarEvent | null;
   next: CalendarEvent | null;
+  /**
+   * When the room actually becomes free: the end of the chain of meetings that
+   * follow each other without a gap (null while free). Differs from
+   * `current.end` when another meeting starts the moment this one ends.
+   */
+  busyUntil: string | null;
   checkIn: CheckInStatus | null;
   /** When the room is free: ISO time the next meeting starts, or end of the day. */
   freeUntil: string | null;

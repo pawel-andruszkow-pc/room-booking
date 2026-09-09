@@ -25,6 +25,12 @@ export class RoomStore {
   optimistic = false;
   error: string | null = null;
   lastUpdated: Date | null = null;
+  /**
+   * True when the current status came from a tap on this tablet (prediction or
+   * its confirmation) rather than from the clock / calendar. The page skips the
+   * state-change animation in that case: the person already knows what happened.
+   */
+  changedByUser = false;
 
   private pollTimer: number | null = null;
   private abort: AbortController | null = null;
@@ -95,6 +101,26 @@ export class RoomStore {
     void this.clock.minute;
     if (!this.current) return null;
     return minutesBetween(this.clock.now, this.current.end);
+  }
+
+  /** When the room is really free again: end of the whole back-to-back block. */
+  get busyUntil(): string | null {
+    return this.status?.busyUntil ?? this.current?.end ?? null;
+  }
+
+  get minutesUntilFree(): number | null {
+    void this.clock.minute;
+    const until = this.busyUntil;
+    if (!until) return null;
+    return minutesBetween(this.clock.now, until);
+  }
+
+  /** The meeting that starts right after the current one, when there is no gap. */
+  get followingMeeting(): CalendarEvent | null {
+    const current = this.current;
+    const next = this.next;
+    if (!current || !next || !this.status?.busyUntil) return null;
+    return this.status.busyUntil !== current.end ? next : null;
   }
 
   /** Seconds left to confirm presence, or null when no prompt is pending. */
@@ -272,13 +298,14 @@ export class RoomStore {
       if (snapshot) {
         this.status = predict(snapshot);
         this.optimistic = true;
+        this.changedByUser = true;
       }
     });
 
     try {
       const status = await send(roomId);
       if (this.roomId !== roomId || version !== this.version) return;
-      this.applyStatus(status);
+      this.applyStatus(status, 'user');
     } catch (err) {
       if (this.roomId === roomId && version === this.version) {
         runInAction(() => {
@@ -297,10 +324,11 @@ export class RoomStore {
     }
   }
 
-  private applyStatus(status: RoomStatus) {
+  private applyStatus(status: RoomStatus, source: 'user' | 'remote' = 'remote') {
     runInAction(() => {
       this.status = status;
       this.optimistic = false;
+      this.changedByUser = source === 'user';
       this.error = null;
       this.loading = false;
       this.lastUpdated = new Date();
@@ -372,6 +400,8 @@ function predictBooked(
     now: start,
     state: 'busy',
     current: event,
+    // Walk-ins are capped at the gap before the next meeting, so no chaining.
+    busyUntil: end,
     checkIn: s.settings.checkInEnabled
       ? { pending: false, confirmed: true, deadline: end }
       : null,
@@ -394,6 +424,7 @@ function predictFreed(s: RoomStatus, now: Date): RoomStatus {
     state: 'free',
     current: null,
     next,
+    busyUntil: null,
     checkIn: null,
     // End of day is unknown here; the server response fills it in.
     freeUntil: next ? next.start : null,

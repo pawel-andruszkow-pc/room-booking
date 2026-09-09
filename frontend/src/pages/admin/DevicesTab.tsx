@@ -58,24 +58,13 @@ const DeviceRow = observer(function DeviceRow({ device }: { device: Device }) {
   };
 
   return (
-    <Card className="grid grid-cols-[1.2fr_1fr_auto_auto_auto] items-center gap-6 py-5">
-      <div>
-        <Input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onBlur={() => name.trim() && name !== device.name && update({ name: name.trim() })}
-          aria-label="Device name"
-        />
-        <div className="mt-2 flex items-center gap-2 text-sm text-white/50">
-          {isThisDevice && <Badge variant="info">this device</Badge>}
-          <span>
-            seen{' '}
-            {device.lastSeenAt
-              ? formatDistanceToNow(new Date(device.lastSeenAt), { addSuffix: true })
-              : 'never'}
-          </span>
-        </div>
-      </div>
+    <Card className="grid grid-cols-[1.2fr_1fr_auto_auto_auto] items-center gap-x-6 gap-y-2 py-5">
+      <Input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onBlur={() => name.trim() && name !== device.name && update({ name: name.trim() })}
+        aria-label="Device name"
+      />
       <Select value={device.roomId ?? NONE} onValueChange={(v) => update({ roomId: v === NONE ? null : v })}>
         <SelectTrigger aria-label="Room">
           <SelectValue placeholder="Room" />
@@ -111,6 +100,16 @@ const DeviceRow = observer(function DeviceRow({ device }: { device: Device }) {
             <Trash2 className="h-5 w-5" />
           </Button>
         )}
+      </div>
+      {/* Full-width meta row so every control above shares one baseline. */}
+      <div className="col-span-5 flex items-center gap-2 text-sm text-white/50">
+        {isThisDevice && <Badge variant="info">this device</Badge>}
+        <span>
+          seen{' '}
+          {device.lastSeenAt
+            ? formatDistanceToNow(new Date(device.lastSeenAt), { addSuffix: true })
+            : 'never'}
+        </span>
       </div>
     </Card>
   );

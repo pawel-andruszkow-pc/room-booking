@@ -84,7 +84,7 @@ export const BookPage = observer(function BookPage() {
     room
       .book(duration)
       .catch((err: Error) => toast.error('Booking failed, room is still free', err.message));
-    toast.success(`Booked until ${endTime}`);
+    // No success toast: the room screen turning busy is the confirmation.
     navigate('/', { replace: true });
   };
 

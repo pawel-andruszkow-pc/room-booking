@@ -15,16 +15,37 @@ import type { CalendarSummary } from '@/types';
 export const CalendarTab = observer(function CalendarTab() {
   const { admin, toast } = useStores();
   const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [newCalendarId, setNewCalendarId] = useState('');
+  const [adding, setAdding] = useState(false);
   const provider = admin.provider;
 
   const load = async () => {
     setLoading(true);
     try {
       await admin.loadCalendars();
+      setLoaded(true);
     } catch (err) {
       toast.error('Could not list calendars', (err as Error).message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  /** Google never lists a calendar merely shared with a service account; subscribing by id fixes that. */
+  const addById = async () => {
+    const id = newCalendarId.trim();
+    if (!id) return;
+    setAdding(true);
+    try {
+      const cal = await admin.addCalendar(id);
+      setNewCalendarId('');
+      setLoaded(true);
+      toast.success(`Calendar "${cal.summary}" is now visible`);
+    } catch (err) {
+      toast.error('Could not add calendar', (err as Error).message);
+    } finally {
+      setAdding(false);
     }
   };
 
@@ -53,6 +74,8 @@ export const CalendarTab = observer(function CalendarTab() {
   };
 
   const usedIds = new Set(admin.rooms.map((r) => r.calendarId));
+  const roomNameFor = (calendarId: string) =>
+    admin.rooms.find((r) => r.calendarId === calendarId)?.name ?? calendarId;
 
   return (
     <div className="space-y-8">
@@ -85,19 +108,44 @@ export const CalendarTab = observer(function CalendarTab() {
                   </Button>
                 )}
               </div>
-              <p className="mt-3 text-white/60">
-                In Google Calendar, share each room calendar with this address and grant “Make changes to
-                events”. Room resources are managed in the Workspace admin console under Buildings and
-                resources.
+              <p className="mt-3 text-sm text-white/45">
+                Share each room calendar with this address (“Make changes to events”).
               </p>
             </div>
             <div className="rounded-2xl bg-white/5 p-6">
               <div className="text-sm font-bold uppercase tracking-wider text-white/50">Impersonated user</div>
               <div className="mt-2 font-mono text-lg">{provider.impersonatedUser ?? 'not set'}</div>
-              <p className="mt-3 text-white/60">
-                Optional. With domain-wide delegation the backend acts as this Workspace user, which lets it
-                end or release meetings booked by anyone.
-              </p>
+              <p className="mt-3 text-sm text-white/45">Optional, needs domain-wide delegation.</p>
+            </div>
+            <div className="col-span-2 rounded-2xl bg-white/5 p-6">
+              <div className="flex items-center gap-3">
+                <div className="text-sm font-bold uppercase tracking-wider text-white/50">Push notifications</div>
+                <Badge variant={provider.push.enabled ? 'success' : 'warning'}>
+                  {provider.push.enabled ? `on · ${provider.push.channels.length} channel(s)` : 'off'}
+                </Badge>
+              </div>
+              {provider.push.enabled ? (
+                <>
+                  <div className="mt-2 truncate font-mono text-sm text-white/70">{provider.push.address}</div>
+                  <p className="mt-3 text-sm text-white/45">
+                    Google reports calendar changes instantly. Rooms not listed below are polled.
+                  </p>
+                  {provider.push.channels.length > 0 && (
+                    <ul className="mt-4 space-y-1 font-mono text-sm text-white/60">
+                      {provider.push.channels.map((c) => (
+                        <li key={c.calendarId} className="flex justify-between gap-4">
+                          <span className="truncate">{roomNameFor(c.calendarId)}</span>
+                          <span className="shrink-0">renews {new Date(c.expiresAt).toLocaleString()}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              ) : (
+                <p className="mt-3 text-sm text-white/45">
+                  {provider.push.disabledReason ?? 'Disabled'}. Rooms are polled instead.
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -108,7 +156,7 @@ export const CalendarTab = observer(function CalendarTab() {
           <div>
             <CardTitle>Available calendars</CardTitle>
             <CardDescription>
-              Calendars the backend can see. Import a room resource with one tap; edit details afterwards.
+              Add each shared room calendar as a room.
             </CardDescription>
           </div>
           <Button variant="secondary" onClick={load} disabled={loading}>
@@ -116,6 +164,33 @@ export const CalendarTab = observer(function CalendarTab() {
             {admin.calendars.length ? 'Refresh' : 'Load calendars'}
           </Button>
         </div>
+
+        {provider?.provider === 'google' && (
+          <div className="mt-6 rounded-2xl bg-white/5 p-6">
+            <Label htmlFor="new-calendar-id">Add a calendar by id</Label>
+            <p className="mt-1 text-sm text-white/45">
+              Shared calendars appear here only after they are added once by id (the room's resource e-mail).
+            </p>
+            <div className="mt-4 flex gap-3">
+              <Input
+                id="new-calendar-id"
+                value={newCalendarId}
+                onChange={(e) => setNewCalendarId(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && addById()}
+                placeholder="c_1234…@resource.calendar.google.com"
+                className="font-mono"
+                disabled={adding}
+              />
+              <Button variant="accent" onClick={addById} disabled={adding || !newCalendarId.trim()}>
+                {adding ? <Spinner className="h-5 w-5" /> : <Plus className="h-5 w-5" />} Add
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {loaded && admin.calendars.length === 0 && (
+          <p className="mt-6 text-sm text-white/45">No calendars yet. Add one by id above.</p>
+        )}
 
         {admin.calendars.length > 0 && (
           <ul className="mt-6 divide-y divide-white/10">

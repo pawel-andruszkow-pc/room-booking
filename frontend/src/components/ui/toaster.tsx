@@ -17,16 +17,20 @@ const COLORS: Record<ToastKind, string> = {
   error: 'border-red-400/40 text-red-200',
 };
 
+/** Confirmations vanish quickly; errors stay long enough to be read (ms). */
+const DURATION: Record<ToastKind, number> = { success: 2000, info: 2500, error: 6000 };
+
 /** Renders the ToastStore queue with Radix Toast (swipe to dismiss, auto-close). */
 export const Toaster = observer(function Toaster() {
   const { toast } = useStores();
   return (
-    <ToastPrimitive.Provider swipeDirection="right" duration={5000}>
+    <ToastPrimitive.Provider swipeDirection="right">
       {toast.items.map((item) => {
         const Icon = ICONS[item.kind];
         return (
           <ToastPrimitive.Root
             key={item.id}
+            duration={DURATION[item.kind]}
             onOpenChange={(open) => !open && toast.dismiss(item.id)}
             className={cn(
               'pointer-events-auto flex w-[26rem] items-start gap-4 rounded-2xl border bg-ink-2/95 p-5 shadow-2xl backdrop-blur',

@@ -61,6 +61,8 @@ export interface RoomStatus {
   state: RoomState;
   current: CalendarEvent | null;
   next: CalendarEvent | null;
+  /** End of the back-to-back block the current meeting belongs to; null while free. */
+  busyUntil: string | null;
   checkIn: CheckInStatus | null;
   freeUntil: string | null;
   availableMinutes: number;
@@ -103,6 +105,13 @@ export interface CalendarProviderInfo {
   provider: CalendarSource;
   serviceAccountEmail: string | null;
   impersonatedUser: string | null;
+  /** Google push notifications (events.watch) — off with the local provider or without PUBLIC_URL. */
+  push: {
+    enabled: boolean;
+    disabledReason: string | null;
+    address: string | null;
+    channels: { calendarId: string; expiresAt: string }[];
+  };
 }
 
 export type PinScope = 'settings' | 'admin';

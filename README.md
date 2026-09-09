@@ -113,11 +113,14 @@ All backend settings live in `backend/.env` (see `.env.example` for descriptions
 
 | Variable | Purpose |
 | --- | --- |
+| `ENVIRONMENT` | `local` (default) or `production`; only production registers Google push channels |
 | `DATABASE_URL` | Postgres connection string (Railway: `${{Postgres.DATABASE_URL}}`) |
 | `BASIC_AUTH_USER` / `BASIC_AUTH_PASSWORD` | Credentials for the page and the API |
 | `SETTINGS_PIN` / `ADMIN_PIN` | Initial PINs (editable later on the admin page) |
 | `CALENDAR_PROVIDER` | `local` or `google` |
 | `GOOGLE_*` | Service-account credentials |
+| `PUBLIC_URL` | Public `https://` origin of the API; enables Google push notifications (derived from `RAILWAY_PUBLIC_DOMAIN` on Railway) |
+| `WATCH_INTERVAL_SECONDS` / `WATCH_PUSH_FALLBACK_SECONDS` | How often the backend re-reads a watched room's calendar, without / with Google push |
 | `SEED_ROOMS` | `Name=calendarId,…` used by `pnpm seed` |
 | `TIMEZONE` | IANA zone for “today” and displayed times |
 | `CORS_ORIGIN` | Allowed frontend origin(s) |

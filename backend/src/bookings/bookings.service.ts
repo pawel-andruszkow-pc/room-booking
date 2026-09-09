@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { addMinutes, differenceInMinutes, endOfDay, startOfDay } from 'date-fns';
 import { fromZonedTime, toZonedTime } from 'date-fns-tz';
+import { CalendarChangesService } from '../calendar/calendar-changes.service';
 import { CalendarService } from '../calendar/calendar.service';
 import { CalendarEvent } from '../calendar/calendar.types';
 import { DevicesService } from '../devices/devices.service';
@@ -31,6 +32,9 @@ interface StatusOptions {
 /** Bookings shorter than this are deleted rather than shortened when ended. */
 const MIN_EVENT_MINUTES = 1;
 
+/** Meetings starting within this many ms of the previous end count as back-to-back. */
+const BACK_TO_BACK_TOLERANCE_MS = 60_000;
+
 @Injectable()
 export class BookingsService {
   private readonly logger = new Logger(BookingsService.name);
@@ -38,6 +42,7 @@ export class BookingsService {
   constructor(
     @InjectRepository(CheckIn) private readonly checkIns: Repository<CheckIn>,
     private readonly calendar: CalendarService,
+    private readonly changes: CalendarChangesService,
     private readonly rooms: RoomsService,
     private readonly devices: DevicesService,
     private readonly settings: SettingsService,
@@ -67,6 +72,7 @@ export class BookingsService {
       }
     }
 
+    const busyUntil = current ? busyBlockEnd(current, events) : null;
     const freeUntil = current ? null : next ? toDate(next.start) : dayEnd;
     const availableMinutes = current
       ? 0
@@ -93,6 +99,7 @@ export class BookingsService {
       state,
       current,
       next,
+      busyUntil: busyUntil ? busyUntil.toISOString() : null,
       checkIn,
       freeUntil: freeUntil ? freeUntil.toISOString() : null,
       availableMinutes,
@@ -153,6 +160,8 @@ export class BookingsService {
       end,
     });
     await this.upsertCheckIn(roomId, event, { confirmedAt: start });
+    // Other tablets on this room should not wait for the next tick or for Google.
+    this.changes.notify(status.room.calendarId);
     this.logger.log(
       `Booked "${title}" in ${status.room.name} for ${dto.durationMinutes} min`,
     );
@@ -262,6 +271,7 @@ export class BookingsService {
     } else {
       await this.calendar.updateEventEnd(room.calendarId, event.id, at);
     }
+    this.changes.notify(room.calendarId);
   }
 
   private async findRunningEvent(
@@ -359,6 +369,20 @@ export class BookingsService {
       return null;
     }
   }
+}
+
+/**
+ * End of the busy block `current` belongs to: keeps extending through every
+ * later meeting that starts before (or within a minute of) the running end.
+ * `events` are sorted by start.
+ */
+function busyBlockEnd(current: CalendarEvent, events: CalendarEvent[]): Date {
+  let end = toDate(current.end);
+  for (const event of events) {
+    if (toDate(event.start).getTime() > end.getTime() + BACK_TO_BACK_TOLERANCE_MS) break;
+    if (toDate(event.end) > end) end = toDate(event.end);
+  }
+  return end;
 }
 
 function toDate(iso: string): Date {

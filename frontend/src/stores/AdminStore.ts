@@ -74,6 +74,17 @@ export class AdminStore {
     });
   }
 
+  /** Subscribes the backend to a shared calendar and shows it in the list. */
+  async addCalendar(calendarId: string) {
+    const calendar = await api.calendar.addCalendar(calendarId);
+    runInAction(() => {
+      this.calendars = [...this.calendars.filter((c) => c.id !== calendar.id), calendar].sort(
+        (a, b) => a.summary.localeCompare(b.summary),
+      );
+    });
+    return calendar;
+  }
+
   /** Creation needs the server-generated id, so it is not optimistic. */
   async createRoom(body: Partial<Room>) {
     const room = await api.rooms.create(body);

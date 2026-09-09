@@ -4,10 +4,14 @@ import { Repository } from 'typeorm';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { Room } from './room.entity';
+import { RoomEventsService } from './room-events.service';
 
 @Injectable()
 export class RoomsService {
-  constructor(@InjectRepository(Room) private readonly rooms: Repository<Room>) {}
+  constructor(
+    @InjectRepository(Room) private readonly rooms: Repository<Room>,
+    private readonly events: RoomEventsService,
+  ) {}
 
   findAll(includeInactive = false): Promise<Room[]> {
     return this.rooms.find({
@@ -24,7 +28,9 @@ export class RoomsService {
 
   async create(dto: CreateRoomDto): Promise<Room> {
     await this.assertCalendarFree(dto.calendarId);
-    return this.rooms.save(this.rooms.create(normalize(dto)));
+    const room = await this.rooms.save(this.rooms.create(normalize(dto)));
+    this.events.emit();
+    return room;
   }
 
   async update(id: string, dto: UpdateRoomDto): Promise<Room> {
@@ -33,12 +39,15 @@ export class RoomsService {
       await this.assertCalendarFree(dto.calendarId);
     }
     Object.assign(room, normalize(dto));
-    return this.rooms.save(room);
+    const saved = await this.rooms.save(room);
+    this.events.emit();
+    return saved;
   }
 
   async remove(id: string): Promise<void> {
     const room = await this.findOne(id);
     await this.rooms.remove(room);
+    this.events.emit();
   }
 
   private async assertCalendarFree(calendarId: string): Promise<void> {

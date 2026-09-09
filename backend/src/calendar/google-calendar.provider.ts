@@ -1,4 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { auth as googleAuth, calendar, calendar_v3 } from '@googleapis/calendar';
 import { appConfig } from '../config/app-config';
 import {
@@ -9,6 +14,22 @@ import {
   CreateEventInput,
   parseCapacity,
 } from './calendar.types';
+
+export interface WatchChannelInput {
+  /** Our channel id (any unique string ≤ 64 chars); Google echoes it back. */
+  channelId: string;
+  /** Secret echoed in X-Goog-Channel-Token so we can verify the sender. */
+  token: string;
+  /** Public https URL Google posts notifications to. */
+  address: string;
+  /** Requested expiry; Google may shorten it and returns the effective value. */
+  expiresAt: Date;
+}
+
+export interface WatchChannel {
+  resourceId: string;
+  expiresAt: Date;
+}
 
 const SCOPES = ['https://www.googleapis.com/auth/calendar'];
 
@@ -62,33 +83,62 @@ export class GoogleCalendarProvider implements CalendarProvider {
     do {
       const res = await this.api().calendarList.list({ pageToken, maxResults: 250 });
       for (const item of res.data.items ?? []) {
-        if (!item.id) continue;
-        out.push({
-          id: item.id,
-          summary: item.summaryOverride ?? item.summary ?? item.id,
-          description: item.description ?? null,
-          location: item.location ?? null,
-          capacity: parseCapacity(item.summary),
-          canWrite: item.accessRole === 'writer' || item.accessRole === 'owner',
-        });
+        if (item.id) out.push(toSummary(item));
       }
       pageToken = res.data.nextPageToken ?? undefined;
     } while (pageToken);
     return out.sort((a, b) => a.summary.localeCompare(b.summary));
   }
 
-  async listEvents(calendarId: string, from: Date, to: Date): Promise<CalendarEvent[]> {
-    const res = await this.api().events.list({
-      calendarId,
-      timeMin: from.toISOString(),
-      timeMax: to.toISOString(),
-      singleEvents: true,
-      orderBy: 'startTime',
-      showDeleted: false,
-      maxResults: 100,
-    });
+  /** Subscribes the service account to a calendar it was granted access to. */
+  async addCalendar(calendarId: string): Promise<CalendarSummary> {
+    try {
+      const res = await this.api().calendarList.insert({
+        requestBody: { id: calendarId },
+      });
+      if (!res.data.id) throw new Error('Google returned a calendar without an id');
+      this.logger.log(`Subscribed to calendar ${res.data.id}`);
+      return toSummary(res.data);
+    } catch (err) {
+      if (!isNotFound(err) && !isForbidden(err)) throw err;
+      const email = appConfig().calendar.google.serviceAccountEmail;
+      throw new NotFoundException(
+        `Calendar "${calendarId}" was not found or is not shared with ${email}. ` +
+          'Share it first (Workspace admin console, Buildings and resources, the room, Share), ' +
+          'then try again.',
+      );
+    }
+  }
 
-    return (res.data.items ?? [])
+  async listEvents(calendarId: string, from: Date, to: Date): Promise<CalendarEvent[]> {
+    let items: calendar_v3.Schema$Event[];
+    try {
+      const res = await this.api().events.list({
+        calendarId,
+        timeMin: from.toISOString(),
+        timeMax: to.toISOString(),
+        singleEvents: true,
+        orderBy: 'startTime',
+        showDeleted: false,
+        maxResults: 100,
+      });
+      items = res.data.items ?? [];
+    } catch (err) {
+      // The most common misconfiguration: a room whose calendar id does not
+      // exist in Google (e.g. seed rooms made for the local provider) or was
+      // not shared with the service account. Say so instead of dumping a
+      // Gaxios stack trace on every poll.
+      if (isNotFound(err) || isForbidden(err)) {
+        const email = appConfig().calendar.google.serviceAccountEmail;
+        throw new ServiceUnavailableException(
+          `Calendar "${calendarId}" was not found or is not shared with ${email}. ` +
+            'Fix the room on the admin page (Calendar tab → Load calendars).',
+        );
+      }
+      throw err;
+    }
+
+    return items
       .filter((item) => item.status !== 'cancelled' && !isDeclinedByRoom(item))
       .map(toCalendarEvent)
       .filter((event): event is CalendarEvent => event !== null);
@@ -150,6 +200,42 @@ export class GoogleCalendarProvider implements CalendarProvider {
     }
   }
 
+  /**
+   * Registers a push channel: Google POSTs to `address` whenever anything on
+   * the calendar changes (the body is empty — we re-read the calendar).
+   */
+  async watchCalendar(
+    calendarId: string,
+    input: WatchChannelInput,
+  ): Promise<WatchChannel> {
+    const res = await this.api().events.watch({
+      calendarId,
+      requestBody: {
+        id: input.channelId,
+        type: 'web_hook',
+        address: input.address,
+        token: input.token,
+        expiration: String(input.expiresAt.getTime()),
+      },
+    });
+    const { resourceId, expiration } = res.data;
+    if (!resourceId)
+      throw new Error('Google returned a watch channel without a resourceId');
+    return {
+      resourceId,
+      expiresAt: expiration ? new Date(Number(expiration)) : input.expiresAt,
+    };
+  }
+
+  /** Stops a push channel. A channel Google no longer knows counts as stopped. */
+  async stopChannel(channelId: string, resourceId: string): Promise<void> {
+    try {
+      await this.api().channels.stop({ requestBody: { id: channelId, resourceId } });
+    } catch (err) {
+      if (!isNotFound(err)) throw err;
+    }
+  }
+
   /** Marks the room resource as "declined" on the event — Google's native no-show release. */
   private async declineAsRoom(calendarId: string, eventId: string): Promise<void> {
     const { data } = await this.api().events.get({ calendarId, eventId });
@@ -167,9 +253,27 @@ export class GoogleCalendarProvider implements CalendarProvider {
   }
 }
 
+function toSummary(item: calendar_v3.Schema$CalendarListEntry): CalendarSummary {
+  const id = item.id ?? '';
+  return {
+    id,
+    summary: item.summaryOverride ?? item.summary ?? id,
+    description: item.description ?? null,
+    location: item.location ?? null,
+    capacity: parseCapacity(item.summary),
+    canWrite: item.accessRole === 'writer' || item.accessRole === 'owner',
+  };
+}
+
 /** Resource calendars keep events the room itself declined; those never block the room. */
 function isDeclinedByRoom(item: calendar_v3.Schema$Event): boolean {
   return (item.attendees ?? []).some((a) => a.self && a.responseStatus === 'declined');
+}
+
+function isNotFound(err: unknown): boolean {
+  const code = (err as { code?: number; response?: { status?: number } })?.code;
+  const status = (err as { response?: { status?: number } })?.response?.status;
+  return code === 404 || status === 404;
 }
 
 function isForbidden(err: unknown): boolean {

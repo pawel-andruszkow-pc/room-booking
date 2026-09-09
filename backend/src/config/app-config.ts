@@ -31,6 +31,16 @@ const timezone = z
   .min(1)
   .refine(isValidTimezone, 'must be a valid IANA timezone, e.g. Europe/Warsaw');
 
+/** Google only delivers push notifications to https:// endpoints with a valid certificate. */
+const publicUrl = z
+  .string()
+  .trim()
+  .transform((v) => v.replace(/\/+$/, ''))
+  .refine(
+    (v) => /^https:\/\/[^/\s]+$/.test(v),
+    'must be an https:// origin without a path, e.g. https://api.example.com',
+  );
+
 /** Env files carry the key on one line with escaped newlines, often quoted. */
 const privateKey = optionalString.transform((raw) =>
   raw === undefined ? undefined : raw.replace(/^"|"$/g, '').replace(/\\n/g, '\n'),
@@ -39,6 +49,13 @@ const privateKey = optionalString.transform((raw) =>
 const envSchema = z
   .object({
     NODE_ENV: optionalString,
+
+    /**
+     * Deployment environment. `local` never registers Google push channels
+     * (even with PUBLIC_URL set), so a developer's database cannot claim the
+     * production calendars' notifications; `production` enables them.
+     */
+    ENVIRONMENT: z.enum(['local', 'production']).default('local'),
 
     /** Railway injects PORT; locally it comes from .env. */
     PORT: z.coerce.number().int().min(1).max(65535).default(3020),
@@ -76,6 +93,22 @@ const envSchema = z
      * shows on the tablet, so it is much shorter than the fallback poll.
      */
     WATCH_INTERVAL_SECONDS: z.coerce.number().int().min(2).max(300).default(5),
+
+    /**
+     * Fallback re-read interval for rooms whose calendar Google notifies us
+     * about. Push notifications can be delayed or dropped, so these rooms are
+     * still polled — just far less often than WATCH_INTERVAL_SECONDS.
+     */
+    WATCH_PUSH_FALLBACK_SECONDS: z.coerce.number().int().min(10).max(3600).default(120),
+
+    /**
+     * Public HTTPS origin of this API, e.g. https://api.example.com. When set
+     * (with the Google provider) the backend registers Calendar push channels
+     * whose callbacks Google delivers to `${PUBLIC_URL}/api/calendar/webhooks/google`.
+     */
+    PUBLIC_URL: optionalString.pipe(publicUrl.optional()),
+    /** Injected by Railway; used as PUBLIC_URL when that is not set explicitly. */
+    RAILWAY_PUBLIC_DOMAIN: optionalString,
 
     CALENDAR_PROVIDER: z.enum(['local', 'google']).default('local'),
     GOOGLE_SERVICE_ACCOUNT_EMAIL: optionalString.pipe(
@@ -127,6 +160,8 @@ const envSchema = z
 
 export interface AppConfig {
   readonly nodeEnv: string | undefined;
+  /** `local` (default) or `production`; only production talks to Google push. */
+  readonly environment: 'local' | 'production';
   readonly port: number;
   /** Allowed frontend origins, already split and trimmed. */
   readonly corsOrigins: readonly string[];
@@ -138,6 +173,13 @@ export interface AppConfig {
   readonly pollIntervalSeconds: number;
   /** Seconds between calendar reads for rooms with a connected tablet. */
   readonly watchIntervalSeconds: number;
+  /** Seconds between fallback reads for rooms covered by Google push notifications. */
+  readonly watchPushFallbackSeconds: number;
+  /**
+   * Public https origin Google can reach, or null when push notifications are
+   * disabled (local development without a tunnel, or the local provider).
+   */
+  readonly publicUrl: string | null;
   readonly databaseUrl: string;
   readonly calendar: {
     readonly provider: 'local' | 'google';
@@ -178,6 +220,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
   const env = result.data;
   return Object.freeze({
     nodeEnv: env.NODE_ENV,
+    environment: env.ENVIRONMENT,
     port: env.PORT,
     corsOrigins: Object.freeze(env.CORS_ORIGIN),
     basicAuth: Object.freeze({
@@ -188,6 +231,10 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     timezone: env.TIMEZONE,
     pollIntervalSeconds: env.POLL_INTERVAL_SECONDS,
     watchIntervalSeconds: env.WATCH_INTERVAL_SECONDS,
+    watchPushFallbackSeconds: env.WATCH_PUSH_FALLBACK_SECONDS,
+    publicUrl:
+      env.PUBLIC_URL ??
+      (env.RAILWAY_PUBLIC_DOMAIN ? `https://${env.RAILWAY_PUBLIC_DOMAIN}` : null),
     databaseUrl: env.DATABASE_URL,
     calendar: Object.freeze({
       provider: env.CALENDAR_PROVIDER,

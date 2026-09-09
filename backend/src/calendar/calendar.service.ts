@@ -21,6 +21,10 @@ export class CalendarService implements CalendarProvider {
     return this.provider.listCalendars();
   }
 
+  addCalendar(calendarId: string): Promise<CalendarSummary> {
+    return this.provider.addCalendar(calendarId);
+  }
+
   listEvents(calendarId: string, from: Date, to: Date): Promise<CalendarEvent[]> {
     return this.provider.listEvents(calendarId, from, to);
   }
