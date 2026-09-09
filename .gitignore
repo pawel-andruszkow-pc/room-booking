@@ -1,0 +1,17 @@
+node_modules/
+# Use pnpm everywhere; never commit an npm lockfile (it diverges from pnpm-lock.yaml).
+package-lock.json
+yarn.lock
+dist/
+build/
+.env
+*.local
+!.env.example
+.DS_Store
+npm-debug.log*
+pnpm-debug.log*
+coverage/
+.vite/
+*.tsbuildinfo
+.idea/
+.vscode/

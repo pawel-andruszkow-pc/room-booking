@@ -1,0 +1,27 @@
+{
+  "name": "room-booking",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Office meeting-room booking kiosk (React tablet UI + NestJS API + Google Calendar)",
+  "type": "module",
+  "scripts": {
+    "install:all": "pnpm --dir backend install && pnpm --dir frontend install",
+    "dev:backend": "pnpm --dir backend start:dev",
+    "dev:frontend": "pnpm --dir frontend dev",
+    "build": "pnpm --dir backend build && pnpm --dir frontend build",
+    "lint": "pnpm --dir backend lint && pnpm --dir frontend lint",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "seed": "pnpm --dir backend seed"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "^11.0.0",
+      "onFail": "warn"
+    }
+  }
+}

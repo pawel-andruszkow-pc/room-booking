@@ -1,0 +1,25 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: room-booking-db
+    restart: unless-stopped
+    # env_file passes POSTGRES_USER/PASSWORD/DB straight into the container; the
+    # postgres image reads them to initialise the cluster.
+    env_file:
+      - ./backend/.env
+    # ${POSTGRES_PORT} interpolation reads the shell, not env_file, so default to
+    # 5434 (matching DATABASE_URL in backend/.env.example).
+    ports:
+      - "${POSTGRES_PORT:-5434}:5432"
+    volumes:
+      - room_booking_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # $$ escapes compose interpolation so the container's shell expands the
+      # POSTGRES_* vars provided via env_file.
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  room_booking_pgdata:
