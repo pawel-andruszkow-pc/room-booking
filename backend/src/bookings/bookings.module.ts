@@ -7,6 +7,7 @@ import { AutoReleaseService } from './auto-release.service';
 import { BookingsController } from './bookings.controller';
 import { BookingsService } from './bookings.service';
 import { CheckIn } from './check-in.entity';
+import { RoomStreamService } from './room-stream.service';
 
 @Module({
   imports: [
@@ -16,6 +17,6 @@ import { CheckIn } from './check-in.entity';
     DevicesModule,
   ],
   controllers: [BookingsController],
-  providers: [BookingsService, AutoReleaseService],
+  providers: [BookingsService, AutoReleaseService, RoomStreamService],
 })
 export class BookingsModule {}

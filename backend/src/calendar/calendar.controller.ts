@@ -6,6 +6,7 @@ import {
   HttpCode,
   Post,
 } from '@nestjs/common';
+import { appConfig } from '../config/app-config';
 import { RequirePin } from '../common/require-pin.decorator';
 import { CalendarService } from './calendar.service';
 import { CreateLocalEventDto } from './dto/create-local-event.dto';
@@ -20,8 +21,8 @@ export class CalendarController {
   provider() {
     return {
       provider: this.calendar.name,
-      serviceAccountEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.trim() || null,
-      impersonatedUser: process.env.GOOGLE_IMPERSONATE_USER?.trim() || null,
+      serviceAccountEmail: appConfig().calendar.google.serviceAccountEmail,
+      impersonatedUser: appConfig().calendar.google.impersonateUser,
     };
   }
 

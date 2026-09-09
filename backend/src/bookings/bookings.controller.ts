@@ -7,8 +7,11 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Sse,
 } from '@nestjs/common';
+import { Observable, map } from 'rxjs';
 import { BookingsService } from './bookings.service';
+import { RoomStreamService } from './room-stream.service';
 import { BookRoomDto } from './dto/book-room.dto';
 import { EventActionDto } from './dto/event-action.dto';
 
@@ -18,11 +21,27 @@ import { EventActionDto } from './dto/event-action.dto';
  */
 @Controller('rooms/:roomId')
 export class BookingsController {
-  constructor(private readonly bookings: BookingsService) {}
+  constructor(
+    private readonly bookings: BookingsService,
+    private readonly stream: RoomStreamService,
+  ) {}
 
   @Get('status')
   status(@Param('roomId', ParseUUIDPipe) roomId: string) {
     return this.bookings.getStatus(roomId, { fromDevice: true });
+  }
+
+  /**
+   * Live status: the current state, then a message whenever it changes. Lets a
+   * calendar edit reach the screen in seconds without the tablet polling hard.
+   */
+  @Sse('stream')
+  streamStatus(
+    @Param('roomId', ParseUUIDPipe) roomId: string,
+  ): Observable<{ data: string }> {
+    return this.stream
+      .subscribe(roomId)
+      .pipe(map((status) => ({ data: JSON.stringify(status) })));
   }
 
   /** Whole-day agenda (past meetings included) for the tablet's "Today" page. */

@@ -92,6 +92,88 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
   return data as T;
 }
 
+/** SSE frames are delimited by a blank line. */
+const FRAME_SEPARATOR = '\n\n';
+
+/**
+ * Subscribes to a server-sent-event endpoint.
+ *
+ * Uses fetch rather than EventSource because EventSource cannot send headers,
+ * and this API is behind HTTP Basic — the alternative would be putting the
+ * credentials in the query string. Reconnects with a capped backoff until the
+ * signal aborts, so a dropped stream heals itself.
+ */
+export function streamEvents<T>(
+  path: string,
+  opts: { signal: AbortSignal; onMessage: (data: T) => void; onError?: () => void },
+): void {
+  let attempt = 0;
+
+  const connect = async (): Promise<void> => {
+    const provided = headerProvider();
+    const headers: Record<string, string> = { Accept: 'text/event-stream' };
+    if (provided.authorization) headers.Authorization = provided.authorization;
+    if (provided.deviceId) headers['X-Device-Id'] = provided.deviceId;
+
+    const response = await fetch(`${BASE_URL}${path}`, {
+      headers,
+      signal: opts.signal,
+      cache: 'no-store',
+    });
+    if (!response.ok || !response.body) {
+      if (response.status === 401) onUnauthorized?.();
+      throw new ApiError(response.status, `Stream failed (${response.status})`);
+    }
+
+    attempt = 0;
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      // Frames are separated by a blank line; a frame may span several chunks.
+      let split = buffer.indexOf(FRAME_SEPARATOR);
+      while (split !== -1) {
+        const frame = buffer.slice(0, split);
+        buffer = buffer.slice(split + FRAME_SEPARATOR.length);
+        const payload = frame
+          .split('\n')
+          .filter((line) => line.startsWith('data:'))
+          .map((line) => line.slice(5).trim())
+          .join('\n');
+        if (payload) {
+          try {
+            opts.onMessage(JSON.parse(payload) as T);
+          } catch {
+            // Ignore a malformed frame rather than tearing down the stream.
+          }
+        }
+        split = buffer.indexOf(FRAME_SEPARATOR);
+      }
+    }
+  };
+
+  const run = () => {
+    connect()
+      .catch(() => opts.onError?.())
+      .then(() => {
+        if (opts.signal.aborted) return;
+        // Both a clean end and a failure land here: retry, backing off to 30s.
+        attempt += 1;
+        const delay = Math.min(1000 * 2 ** (attempt - 1), 30_000);
+        window.setTimeout(() => {
+          if (!opts.signal.aborted) run();
+        }, delay);
+      });
+  };
+
+  run();
+}
+
 function extractMessage(data: unknown, status: number): string {
   if (data && typeof data === 'object' && 'message' in data) {
     const m = (data as { message: unknown }).message;

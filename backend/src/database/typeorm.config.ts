@@ -1,5 +1,6 @@
 import { join } from 'path';
 import { DataSourceOptions } from 'typeorm';
+import { appConfig } from '../config/app-config';
 import { Room } from '../rooms/room.entity';
 import { Device } from '../devices/device.entity';
 import { AppSettings } from '../settings/app-settings.entity';
@@ -19,17 +20,9 @@ import { CheckIn } from '../bookings/check-in.entity';
  * is always false.
  */
 export function buildDataSourceOptions(): DataSourceOptions {
-  const url = process.env.DATABASE_URL;
-  if (!url) {
-    throw new Error(
-      'DATABASE_URL is not set. Point it at your Postgres instance ' +
-        '(on Railway, reference ${{Postgres.DATABASE_URL}}).',
-    );
-  }
-
   return {
     type: 'postgres',
-    url,
+    url: appConfig().databaseUrl,
     entities: [Room, Device, AppSettings, LocalEvent, CheckIn],
     // Matches both compiled (.js) and ts-node (.ts) runs.
     migrations: [join(__dirname, 'migrations', '*{.ts,.js}')],

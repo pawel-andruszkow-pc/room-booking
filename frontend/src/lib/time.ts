@@ -6,6 +6,7 @@
 
 const timeFormatters = new Map<string, Intl.DateTimeFormat>();
 const dateFormatters = new Map<string, Intl.DateTimeFormat>();
+const shortDateFormatters = new Map<string, Intl.DateTimeFormat>();
 
 function timeFormatter(tz: string): Intl.DateTimeFormat {
   let f = timeFormatters.get(tz);
@@ -35,6 +36,21 @@ function dateFormatter(tz: string): Intl.DateTimeFormat {
   return f;
 }
 
+function shortDateFormatter(tz: string): Intl.DateTimeFormat {
+  let f = shortDateFormatters.get(tz);
+  if (!f) {
+    f = new Intl.DateTimeFormat('en-GB', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      timeZone: safeTz(tz),
+    });
+    shortDateFormatters.set(tz, f);
+  }
+  return f;
+}
+
 function safeTz(tz: string): string | undefined {
   try {
     new Intl.DateTimeFormat('en', { timeZone: tz });
@@ -50,6 +66,11 @@ export function formatTime(date: Date | string, tz: string): string {
 
 export function formatDate(date: Date | string, tz: string): string {
   return dateFormatter(tz).format(typeof date === 'string' ? new Date(date) : date);
+}
+
+/** "Wed, 5 Mar 2025" — the compact form shown under the kiosk clock. */
+export function formatDateShort(date: Date | string, tz: string): string {
+  return shortDateFormatter(tz).format(typeof date === 'string' ? new Date(date) : date);
 }
 
 export function formatRange(start: Date | string, end: Date | string, tz: string): string {

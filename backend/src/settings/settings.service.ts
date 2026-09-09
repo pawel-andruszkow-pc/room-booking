@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { appConfig } from '../config/app-config';
 import { safeEqual } from '../common/safe-equal';
 import { PinScope } from '../common/require-pin.decorator';
 import { AppSettings } from './app-settings.entity';
@@ -38,11 +39,13 @@ export class SettingsService implements OnModuleInit {
     if (this.cache) return this.cache;
     let row = await this.repo.findOne({ where: { id: 1 } });
     if (!row) {
+      const config = appConfig();
       row = this.repo.create({
         id: 1,
-        settingsPin: process.env.SETTINGS_PIN?.trim() || '1234',
-        adminPin: process.env.ADMIN_PIN?.trim() || '0000',
-        timezone: process.env.TIMEZONE?.trim() || 'Europe/Warsaw',
+        settingsPin: config.pins.settings,
+        adminPin: config.pins.admin,
+        timezone: config.timezone,
+        pollIntervalSeconds: config.pollIntervalSeconds,
       });
       row = await this.repo.save(row);
       this.logger.log('Created default app settings from environment.');
@@ -64,12 +67,12 @@ export class SettingsService implements OnModuleInit {
       pollIntervalSeconds: s.pollIntervalSeconds,
       maxBookingMinutes: s.maxBookingMinutes,
       calendarProvider: this.calendarProvider,
-      googleServiceAccountEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.trim() || null,
+      googleServiceAccountEmail: appConfig().calendar.google.serviceAccountEmail,
     };
   }
 
   get calendarProvider(): CalendarProviderName {
-    return process.env.CALENDAR_PROVIDER === 'google' ? 'google' : 'local';
+    return appConfig().calendar.provider;
   }
 
   async update(dto: UpdateSettingsDto): Promise<PublicSettings> {

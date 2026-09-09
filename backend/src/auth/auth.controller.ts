@@ -6,6 +6,7 @@ import {
   HttpCode,
   Post,
 } from '@nestjs/common';
+import { appConfig } from '../config/app-config';
 import type { PinScope } from '../common/require-pin.decorator';
 import { SettingsService } from '../settings/settings.service';
 import { VerifyPinDto } from './dto/verify-pin.dto';
@@ -21,7 +22,7 @@ export class AuthController {
   @Get('me')
   me() {
     return {
-      user: process.env.BASIC_AUTH_USER,
+      user: appConfig().basicAuth.user,
       calendarProvider: this.settings.calendarProvider,
     };
   }

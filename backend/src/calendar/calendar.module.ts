@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { appConfig } from '../config/app-config';
 import { CalendarController } from './calendar.controller';
 import { CalendarService } from './calendar.service';
 import { CALENDAR_PROVIDER, CalendarProvider } from './calendar.types';
@@ -14,14 +15,14 @@ import { LocalEvent } from './local-event.entity';
     LocalCalendarProvider,
     GoogleCalendarProvider,
     {
-      // CALENDAR_PROVIDER env decides which backend serves the app.
+      // CALENDAR_PROVIDER decides which backend serves the app.
       provide: CALENDAR_PROVIDER,
       inject: [LocalCalendarProvider, GoogleCalendarProvider],
       useFactory: (
         local: LocalCalendarProvider,
         google: GoogleCalendarProvider,
       ): CalendarProvider =>
-        process.env.CALENDAR_PROVIDER === 'google' ? google : local,
+        appConfig().calendar.provider === 'google' ? google : local,
     },
     CalendarService,
   ],

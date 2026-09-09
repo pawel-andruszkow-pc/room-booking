@@ -3,6 +3,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AppConfigModule } from './config/config.module';
 import { buildDataSourceOptions } from './database/typeorm.config';
 import { BasicAuthGuard } from './common/basic-auth.guard';
 import { PinGuard } from './common/pin.guard';
@@ -17,7 +18,9 @@ import { SettingsModule } from './settings/settings.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    // ConfigModule loads .env into process.env before this factory runs.
+    // ConfigModule loads .env into process.env; AppConfigModule then validates
+    // it once and exposes the typed object every provider injects.
+    AppConfigModule,
     TypeOrmModule.forRootAsync({ useFactory: () => buildDataSourceOptions() }),
     ScheduleModule.forRoot(),
     SettingsModule,

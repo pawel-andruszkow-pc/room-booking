@@ -1,6 +1,6 @@
 import { observer } from 'mobx-react-lite';
 import { useStores } from '@/stores/StoreContext';
-import { formatDate, formatTime } from '@/lib/time';
+import { formatDateShort, formatTime } from '@/lib/time';
 import { SECRET_TAP_ATTR } from '@/hooks/useSecretTap';
 import { cn } from '@/lib/utils';
 
@@ -46,11 +46,14 @@ export const Clock = observer(function Clock({
       {showDate && (
         <div
           className={cn(
-            'mt-2 font-medium text-white/70',
-            size === 'lg' ? 'text-3xl' : 'text-base',
+            // Negative margin: `leading-none` still leaves the font's internal
+            // descender space under the digits, so the date needs pulling up to
+            // sit directly beneath them.
+            'font-medium text-white/70',
+            size === 'lg' ? '-mt-2 text-3xl' : 'mt-0.5 text-base',
           )}
         >
-          {formatDate(clock.now, timezone)}
+          {formatDateShort(clock.now, timezone)}
         </div>
       )}
     </div>

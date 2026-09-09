@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useNavigate } from 'react-router-dom';
-import { Expand, LogOut, Lock, ShieldCheck, Save } from 'lucide-react';
+import { Expand, LogOut, Lock, Save } from 'lucide-react';
 import { useStores } from '@/stores/StoreContext';
 import { useKiosk } from '@/hooks/useKiosk';
 import { PageShell } from '@/components/PageShell';
@@ -80,7 +80,7 @@ const SettingsForm = observer(function SettingsForm() {
       subtitle="Which room does this tablet show?"
       timezone={room.timezone}
       actions={
-        <Button variant="ghost" size="md" onClick={() => auth.lock('settings')}>
+        <Button variant="ghost" size="md" onClick={() => auth.lock()}>
           <Lock className="h-5 w-5" /> Lock
         </Button>
       }
@@ -147,19 +147,6 @@ const SettingsForm = observer(function SettingsForm() {
         </Card>
 
         <div className="space-y-10">
-          <Card>
-            <CardTitle>Administration</CardTitle>
-            <CardDescription>Rooms, calendar connection, PINs and devices.</CardDescription>
-            <Button
-              size="lg"
-              variant="secondary"
-              className="mt-6 w-full"
-              onClick={() => navigate('/admin')}
-            >
-              <ShieldCheck className="h-6 w-6" /> Open admin page
-            </Button>
-          </Card>
-
           <Card>
             <CardTitle>Account</CardTitle>
             <CardDescription>Signed in as {auth.user ?? '…'}</CardDescription>

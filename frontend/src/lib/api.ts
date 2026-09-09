@@ -1,4 +1,4 @@
-import { request } from './http';
+import { request, streamEvents } from './http';
 import type {
   CalendarEvent,
   CalendarProviderInfo,
@@ -40,6 +40,11 @@ export const api = {
 
     status: (id: string, signal?: AbortSignal) =>
       request<RoomStatus>(`/rooms/${id}/status`, { signal }),
+    /** Live status pushed by the backend whenever the room changes. */
+    streamStatus: (
+      id: string,
+      opts: { signal: AbortSignal; onMessage: (s: RoomStatus) => void; onError?: () => void },
+    ) => streamEvents<RoomStatus>(`/rooms/${id}/stream`, opts),
     today: (id: string, signal?: AbortSignal) =>
       request<RoomDay>(`/rooms/${id}/today`, { signal }),
     book: (id: string, durationMinutes: number, title?: string) =>

@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { addMinutes, subMinutes } from 'date-fns';
 import { CheckIn } from '../bookings/check-in.entity';
+import { appConfig } from '../config/app-config';
 import { LocalEvent } from '../calendar/local-event.entity';
 import { Device } from '../devices/device.entity';
 import { Room } from '../rooms/room.entity';
@@ -107,7 +108,7 @@ export class SeedService {
 
     await this.ensureSettings();
 
-    const seedRooms = parseSeedRooms(process.env.SEED_ROOMS);
+    const seedRooms = parseSeedRooms(appConfig().seedRooms);
     const rooms: Room[] = [];
     for (const [index, seed] of seedRooms.entries()) {
       let room = await this.rooms.findOne({ where: { calendarId: seed.calendarId } });
@@ -125,7 +126,7 @@ export class SeedService {
       rooms.push(room);
     }
 
-    if ((process.env.CALENDAR_PROVIDER ?? 'local') !== 'local') {
+    if (appConfig().calendar.provider !== 'local') {
       this.logger.log(
         'CALENDAR_PROVIDER=google — skipping demo events (they live in Google Calendar).',
       );
@@ -154,12 +155,14 @@ export class SeedService {
   private async ensureSettings(): Promise<void> {
     const existing = await this.settings.findOne({ where: { id: 1 } });
     if (existing) return;
+    const config = appConfig();
     await this.settings.save(
       this.settings.create({
         id: 1,
-        settingsPin: process.env.SETTINGS_PIN?.trim() || '1234',
-        adminPin: process.env.ADMIN_PIN?.trim() || '0000',
-        timezone: process.env.TIMEZONE?.trim() || 'Europe/Warsaw',
+        settingsPin: config.pins.settings,
+        adminPin: config.pins.admin,
+        timezone: config.timezone,
+        pollIntervalSeconds: config.pollIntervalSeconds,
       }),
     );
     this.logger.log('Created default app settings.');

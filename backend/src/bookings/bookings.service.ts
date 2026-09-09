@@ -309,23 +309,46 @@ export class BookingsService {
       .getOne();
   }
 
+  /**
+   * Creates or updates the presence record for one event.
+   *
+   * Two requests can reach this for the same (room, event) at once: booking
+   * from the tablet inserts a confirmed record right after creating the event,
+   * while a status poll that already sees the new event inserts a pending one.
+   * The unique index makes one of them fail; the loser merges its patch into
+   * the row that won, so both orderings converge on the same result.
+   */
   private async upsertCheckIn(
     roomId: string,
     event: CalendarEvent,
     patch: Partial<Pick<CheckIn, 'confirmedAt' | 'releasedAt'>>,
   ): Promise<CheckIn> {
-    let record = await this.checkIns.findOne({ where: { roomId, eventId: event.id } });
-    if (!record) {
-      record = this.checkIns.create({
-        roomId,
-        eventId: event.id,
-        eventStartsAt: toDate(event.start),
-        confirmedAt: null,
-        releasedAt: null,
-      });
+    const existing = await this.checkIns.findOne({
+      where: { roomId, eventId: event.id },
+    });
+    if (existing) {
+      Object.assign(existing, patch);
+      return this.checkIns.save(existing);
     }
-    Object.assign(record, patch);
-    return this.checkIns.save(record);
+
+    const created = this.checkIns.create({
+      roomId,
+      eventId: event.id,
+      eventStartsAt: toDate(event.start),
+      confirmedAt: null,
+      releasedAt: null,
+      ...patch,
+    });
+    try {
+      return await this.checkIns.save(created);
+    } catch (err) {
+      if (!isUniqueViolation(err)) throw err;
+      const winner = await this.checkIns.findOneOrFail({
+        where: { roomId, eventId: event.id },
+      });
+      Object.assign(winner, patch);
+      return this.checkIns.save(winner);
+    }
   }
 
   private async deviceName(deviceId: string): Promise<string | null> {
@@ -340,4 +363,10 @@ export class BookingsService {
 
 function toDate(iso: string): Date {
   return new Date(iso);
+}
+
+/** Postgres unique-violation (SQLSTATE 23505) — a concurrent insert won. */
+function isUniqueViolation(err: unknown): boolean {
+  const e = err as { code?: string; driverError?: { code?: string } };
+  return (e?.driverError?.code ?? e?.code) === '23505';
 }

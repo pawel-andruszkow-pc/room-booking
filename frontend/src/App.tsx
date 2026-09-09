@@ -6,6 +6,7 @@ import { useStores } from '@/stores/StoreContext';
 import { RequireAuth } from '@/components/RequireAuth';
 import { PageTransition } from '@/components/PageTransition';
 import { Toaster } from '@/components/ui/toaster';
+import { Spinner } from '@/components/ui/spinner';
 import { LoginPage } from '@/pages/LoginPage';
 import { RoomPage } from '@/pages/RoomPage';
 import { BookPage } from '@/pages/BookPage';
@@ -23,6 +24,16 @@ export const App = observer(function App() {
 
   // Key transitions on the top-level segment so /admin tab switches don't re-animate.
   const segment = location.pathname.split('/')[1] || 'room';
+
+  // Credentials and the device assignment are both known before the first
+  // route renders, so a reload never flashes the login or "not assigned" page.
+  if (!store.booted) {
+    return (
+      <div className="flex h-full items-center justify-center bg-ink">
+        <Spinner className="h-10 w-10 text-white/60" />
+      </div>
+    );
+  }
 
   return (
     <div className="h-full overflow-hidden">

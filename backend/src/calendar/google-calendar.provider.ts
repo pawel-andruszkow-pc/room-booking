@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { auth as googleAuth, calendar, calendar_v3 } from '@googleapis/calendar';
+import { appConfig } from '../config/app-config';
 import {
   CalendarEvent,
   CalendarProvider,
@@ -32,17 +33,19 @@ export class GoogleCalendarProvider implements CalendarProvider {
   private api(): calendar_v3.Calendar {
     if (this.client) return this.client;
 
-    const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.trim();
-    const rawKey = process.env.GOOGLE_PRIVATE_KEY?.trim();
-    if (!email || !rawKey) {
+    const {
+      serviceAccountEmail: email,
+      privateKey: key,
+      impersonateUser,
+    } = appConfig().calendar.google;
+    if (!email || !key) {
+      // Unreachable with CALENDAR_PROVIDER=google (config validation demands
+      // both); this guards a provider constructed directly, e.g. in a test.
       throw new Error(
         'GOOGLE_SERVICE_ACCOUNT_EMAIL and GOOGLE_PRIVATE_KEY are required for CALENDAR_PROVIDER=google',
       );
     }
-
-    // Env files usually carry the key with escaped newlines and sometimes quotes.
-    const key = rawKey.replace(/^"|"$/g, '').replace(/\\n/g, '\n');
-    const subject = process.env.GOOGLE_IMPERSONATE_USER?.trim() || undefined;
+    const subject = impersonateUser ?? undefined;
 
     const auth = new googleAuth.JWT({ email, key, scopes: SCOPES, subject });
     this.client = calendar({ version: 'v3', auth });

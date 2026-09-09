@@ -28,6 +28,8 @@ export class RoomStore {
 
   private pollTimer: number | null = null;
   private abort: AbortController | null = null;
+  /** Aborts the SSE subscription when the room changes or the store stops. */
+  private streamAbort: AbortController | null = null;
   private disposers: Array<() => void> = [];
   /** Bumped on every mutation; responses from an older version are discarded. */
   private version = 0;
@@ -37,12 +39,19 @@ export class RoomStore {
   constructor(private readonly clock: ClockStore) {
     makeAutoObservable<
       this,
-      'pollTimer' | 'abort' | 'disposers' | 'clock' | 'version' | 'ownBookings'
+      | 'pollTimer'
+      | 'abort'
+      | 'streamAbort'
+      | 'disposers'
+      | 'clock'
+      | 'version'
+      | 'ownBookings'
     >(
       this,
       {
         pollTimer: false,
         abort: false,
+        streamAbort: false,
         disposers: false,
         clock: false,
         version: false,
@@ -118,12 +127,18 @@ export class RoomStore {
   // --- lifecycle -------------------------------------------------------------
 
   start(roomId: string) {
-    if (this.roomId === roomId && this.pollTimer !== null) return;
+    // `roomId` is set synchronously below, so this also covers a second call
+    // that arrives while the first refresh is still in flight — React
+    // StrictMode invokes mount effects twice, and the old guard additionally
+    // required pollTimer, which refresh() only sets once it has responded.
+    // That restarted the store and aborted the request already on the wire.
+    if (this.roomId === roomId) return;
     this.stop();
     this.roomId = roomId;
     this.status = null;
     this.error = null;
     void this.refresh();
+    this.openStream(roomId);
 
     // Refresh the instant a meeting starts/ends or a deadline passes.
     this.disposers.push(
@@ -153,6 +168,8 @@ export class RoomStore {
     this.clearPoll();
     this.abort?.abort();
     this.abort = null;
+    this.streamAbort?.abort();
+    this.streamAbort = null;
     this.disposers.forEach((d) => d());
     this.disposers = [];
     this.roomId = null;
@@ -296,6 +313,28 @@ export class RoomStore {
     if (!this.roomId) return;
     const seconds = this.status?.settings.pollIntervalSeconds ?? 20;
     this.pollTimer = window.setTimeout(() => void this.refresh(), seconds * 1000);
+  }
+
+  /**
+   * Subscribes to the backend's push stream so a calendar change shows within
+   * seconds. The poll below stays as a fallback: if the stream drops (proxy
+   * timeout, sleeping tablet) the screen keeps updating at the slower rate
+   * while the stream reconnects on its own.
+   */
+  private openStream(roomId: string) {
+    const controller = new AbortController();
+    this.streamAbort = controller;
+    api.rooms.streamStatus(roomId, {
+      signal: controller.signal,
+      onMessage: (status) => {
+        if (controller.signal.aborted || this.roomId !== roomId) return;
+        // A mutation is in flight; its own refresh carries the truth.
+        if (this.optimistic) return;
+        this.applyStatus(status);
+        // Pushed data is fresh, so the fallback poll can wait a full interval.
+        this.schedulePoll();
+      },
+    });
   }
 
   private clearPoll() {

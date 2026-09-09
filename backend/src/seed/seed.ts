@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';
-import { validateEnv } from '../env.validation';
+import { appConfig } from '../config/app-config';
 import { SeedModule } from './seed.module';
 import { SeedService } from './seed.service';
 
@@ -13,7 +13,8 @@ import { SeedService } from './seed.service';
  *   pnpm seed -- --reset # wipe rooms, devices, local events and check-ins first
  */
 async function seed() {
-  validateEnv();
+  // Fail fast on a bad .env before opening a database connection.
+  appConfig();
 
   const reset = process.argv.includes('--reset');
 

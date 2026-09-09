@@ -2,33 +2,47 @@ import { useEffect, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { CalendarDays, CalendarPlus, Check, MapPin, Settings, WifiOff, X } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import {
+  CalendarClock,
+  CalendarDays,
+  CalendarPlus,
+  Check,
+  MapPin,
+  Settings,
+  Timer,
+  WifiOff,
+  X,
+} from 'lucide-react';
 import { useStores } from '@/stores/StoreContext';
 import { useKiosk } from '@/hooks/useKiosk';
 import { useSecretTap } from '@/hooks/useSecretTap';
 import { Button } from '@/components/ui/button';
 import { Clock } from '@/components/Clock';
 import { Spinner } from '@/components/ui/spinner';
-import { formatCountdown, formatRange, formatTime } from '@/lib/time';
+import { formatCountdown, formatDuration, formatTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 
+/** Every state headline is one short word, so they all share a size. */
+const headlineClass =
+  'text-[clamp(8rem,13.5vw,15rem)] font-extrabold leading-[0.9] tracking-tight';
+
 /**
- * Headline size by title length so real names ("Knowledge sharing box",
- * "Wotkshops with Softnet", "Izidrop - planowanie") fit the left column in at
- * most two lines at 1920×1200, and very long ones still stay within three.
+ * Free and busy share one layout (see design): the state word on the left, a
+ * labelled figure on the right of a divider.
  */
-function titleClass(title: string, variant: 'busy' | 'check-in'): string {
-  const n = title.length;
-  if (variant === 'busy') {
-    if (n <= 14) return 'text-[clamp(4rem,7vw,7.5rem)] line-clamp-2';
-    if (n <= 24) return 'text-[clamp(3.5rem,5.6vw,6rem)] line-clamp-2';
-    if (n <= 40) return 'text-[clamp(3rem,4.4vw,4.75rem)] line-clamp-3';
-    return 'text-[clamp(2.5rem,3.4vw,3.75rem)] line-clamp-3';
-  }
-  if (n <= 14) return 'text-[clamp(3.5rem,6vw,6rem)] line-clamp-2';
-  if (n <= 24) return 'text-[clamp(3rem,4.6vw,5rem)] line-clamp-2';
-  return 'text-[clamp(2.5rem,3.4vw,3.75rem)] line-clamp-3';
-}
+const splitClass = 'flex items-stretch gap-[clamp(2rem,4vw,5rem)]';
+const splitLeftClass = 'flex min-w-0 flex-1 flex-col justify-center';
+const splitRightClass =
+  'flex w-[45%] shrink-0 flex-col justify-center border-l border-white/25 pl-[clamp(2rem,3.5vw,4rem)]';
+
+/** Small heading above the figure in the right-hand column. */
+const panelLabelClass =
+  'flex items-center gap-3 text-[clamp(1.5rem,2.1vw,2.375rem)] font-medium text-white/80';
+
+/** Check-in answers: icon beside the label, sized to fit the right column. */
+const checkInButtonClass =
+  'h-[clamp(3.25rem,4.5vw,5rem)] gap-[clamp(0.5rem,0.8vw,1rem)] px-[clamp(0.875rem,1.4vw,2rem)] text-[clamp(1rem,1.3vw,1.5rem)]';
 
 /** Two buttons side by side must share the left column at any width. */
 const pairClass = 'flex w-full gap-[clamp(0.75rem,1.2vw,1.25rem)]';
@@ -122,7 +136,7 @@ export const RoomPage = observer(function RoomPage() {
               </span>
             )}
           </div>
-          <Clock timezone={tz} showDate={false} onPointerDown={secretTap} className="-mt-3" />
+          <Clock timezone={tz} onPointerDown={secretTap} className="-mt-3 text-right" />
         </header>
 
         {/* Middle: the one thing that matters right now. */}
@@ -136,47 +150,90 @@ export const RoomPage = observer(function RoomPage() {
           )}
           <AnimatePresence mode="wait" initial={false}>
             {!status ? null : state === 'free' ? (
-              <motion.div key="free" {...panelMotion}>
-                <h1 className="text-[clamp(7rem,12vw,13rem)] font-extrabold leading-[0.9] tracking-tight">Free</h1>
-                <p className="mt-8 line-clamp-2 max-w-[70%] text-4xl font-medium leading-snug text-white/85">
-                  {room.next ? (
-                    <>
-                      Next <span className="font-bold text-white">{room.next.title}</span>{' '}
-                      <span className="tabular">at {formatTime(room.next.start, tz)}</span>
-                    </>
-                  ) : (
-                    'No more meetings today'
-                  )}
-                </p>
+              <motion.div
+                key="free"
+                {...panelMotion}
+                className={splitClass}
+              >
+                <div className={splitLeftClass}>
+                  <h1 className={headlineClass}>Free</h1>
+                </div>
+                {room.next ? (
+                  <DetailPanel
+                    icon={CalendarClock}
+                    label="Next meeting"
+                    value={formatDuration(room.minutesUntilNext ?? 0)}
+                    at={formatTime(room.next.start, tz)}
+                  />
+                ) : (
+                  // Same two columns with nothing to count down to, so the
+                  // screen keeps its shape all day.
+                  <div className={splitRightClass}>
+                    <div className={panelLabelClass}>
+                      <CalendarClock className="h-[1.15em] w-[1.15em] shrink-0" />
+                      Next meeting
+                    </div>
+                    <div className="mt-[clamp(0.75rem,1.2vw,1.5rem)] text-[50px] font-extrabold leading-[1.05] tracking-tight">
+                      No more
+                      <br />
+                      meetings today
+                    </div>
+                  </div>
+                )}
               </motion.div>
             ) : state === 'awaiting-check-in' && room.current ? (
-              <motion.div key={`check-${room.current.id}`} {...panelMotion} className="max-w-[80%]">
-                <h1
-                  className={cn(
-                    'break-words font-extrabold leading-[1.05] tracking-tight text-balance',
-                    titleClass(room.current.title, 'check-in'),
-                  )}
-                >
-                  {room.current.title}
-                </h1>
-                <p className="mt-10 text-4xl font-bold">Is this meeting taking place?</p>
-                <p className="mt-3 text-2xl text-white/80">
-                  Room will be released in <CountdownLabel />
-                </p>
+              <motion.div
+                key={`check-${room.current.id}`}
+                {...panelMotion}
+                className={splitClass}
+              >
+                <div className={splitLeftClass}>
+                  <h1 className={headlineClass}>Busy</h1>
+                </div>
+                <div className={splitRightClass}>
+                  <p className="text-[clamp(1.5rem,2.4vw,2.875rem)] font-bold leading-tight">
+                    Is this meeting taking place?
+                  </p>
+                  <p className="mt-[clamp(0.5rem,0.8vw,1rem)] text-[clamp(1rem,1.5vw,1.625rem)] text-white/80">
+                    Room will be released in <CountdownLabel />
+                  </p>
+                  <div className="mt-[clamp(1rem,1.6vw,2rem)] flex flex-wrap gap-[clamp(0.625rem,1vw,1.25rem)]">
+                    <Button
+                      variant="primary"
+                      className={checkInButtonClass}
+                      disabled={room.busy}
+                      onClick={() => act(room.confirmPresence)}
+                    >
+                      <Check className="h-[1.4em] w-[1.4em] shrink-0" />
+                      Yes, we&apos;re here
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className={checkInButtonClass}
+                      disabled={room.busy}
+                      onClick={() => act(room.release, 'Room released')}
+                    >
+                      <X className="h-[1.4em] w-[1.4em] shrink-0" />
+                      Release room
+                    </Button>
+                  </div>
+                </div>
               </motion.div>
             ) : room.current ? (
-              <motion.div key={`busy-${room.current.id}`} {...panelMotion} className="max-w-[80%]">
-                <h1
-                  className={cn(
-                    'break-words font-extrabold leading-[1.05] tracking-tight text-balance',
-                    titleClass(room.current.title, 'busy'),
-                  )}
-                >
-                  {room.current.title}
-                </h1>
-                <p className="tabular mt-6 text-5xl font-semibold text-white/90">
-                  {formatRange(room.current.start, room.current.end, tz)}
-                </p>
+              <motion.div
+                key={`busy-${room.current.id}`}
+                {...panelMotion}
+                className={splitClass}
+              >
+                <div className={splitLeftClass}>
+                  <h1 className={headlineClass}>Busy</h1>
+                </div>
+                <DetailPanel
+                  icon={Timer}
+                  label="Free in"
+                  value={formatDuration(room.minutesUntilCurrentEnds ?? 0)}
+                  at={formatTime(room.current.end, tz)}
+                />
               </motion.div>
             ) : null}
           </AnimatePresence>
@@ -225,30 +282,6 @@ export const RoomPage = observer(function RoomPage() {
                 </Button>
               </motion.div>
             )}
-            {state === 'awaiting-check-in' && (
-              <motion.div key="checkin" {...panelMotion} className={pairClass}>
-                <Button
-                  size="xl"
-                  variant="success"
-                  className={pairButtonClass}
-                  disabled={room.busy}
-                  onClick={() => act(room.confirmPresence)}
-                >
-                  <Check className="h-[1.2em] w-[1.2em] shrink-0" />
-                  <span className="truncate">Yes, we're here</span>
-                </Button>
-                <Button
-                  size="xl"
-                  variant="outline"
-                  className={pairButtonClass}
-                  disabled={room.busy}
-                  onClick={() => act(room.release, 'Room released')}
-                >
-                  <X className="h-[1.2em] w-[1.2em] shrink-0" />
-                  <span className="truncate">No, free the room</span>
-                </Button>
-              </motion.div>
-            )}
             {state === 'busy' && (
               <motion.div key="end" {...panelMotion} className="w-full">
                 <EndMeetingButton
@@ -268,6 +301,37 @@ export const RoomPage = observer(function RoomPage() {
     </div>
   );
 });
+
+/**
+ * Right-hand column of the split states: a small label, the figure that matters
+ * (minutes until the room changes state) and the clock time it happens at.
+ */
+function DetailPanel({
+  icon: Icon,
+  label,
+  value,
+  at,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  at: string;
+}) {
+  return (
+    <div className={splitRightClass}>
+      <div className={panelLabelClass}>
+        <Icon className="h-[1.15em] w-[1.15em] shrink-0" />
+        {label}
+      </div>
+      <div className="mt-[clamp(0.75rem,1.2vw,1.5rem)] text-[clamp(3.25rem,5.8vw,6.5rem)] font-extrabold leading-none tracking-tight">
+        {value}
+      </div>
+      <div className="tabular mt-[clamp(0.5rem,0.8vw,1rem)] text-[clamp(1.75rem,2.8vw,3.25rem)] font-semibold text-white/90">
+        at {at}
+      </div>
+    </div>
+  );
+}
 
 /** Own observer so only this text re-renders every second. */
 const CountdownLabel = observer(function CountdownLabel() {
@@ -305,7 +369,7 @@ function EndMeetingButton({
   }
   return (
     <div className={pairClass}>
-      <Button size="xl" variant="danger" className={pairButtonClass} disabled={disabled} onClick={onConfirm}>
+      <Button size="xl" variant="primary" className={pairButtonClass} disabled={disabled} onClick={onConfirm}>
         <Check className="h-[1.2em] w-[1.2em] shrink-0" />
         <span className="truncate">Yes, end it</span>
       </Button>

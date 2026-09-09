@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
+import { appConfig } from '../config/app-config';
 import { IS_PUBLIC_KEY } from './public.decorator';
 import { safeEqual } from './safe-equal';
 
@@ -34,11 +35,10 @@ export class BasicAuthGuard implements CanActivate {
       throw new UnauthorizedException('Missing credentials');
     }
 
-    const expectedUser = process.env.BASIC_AUTH_USER ?? '';
-    const expectedPassword = process.env.BASIC_AUTH_PASSWORD ?? '';
+    const expected = appConfig().basicAuth;
     const ok =
-      safeEqual(credentials.user, expectedUser) &&
-      safeEqual(credentials.password, expectedPassword);
+      safeEqual(credentials.user, expected.user) &&
+      safeEqual(credentials.password, expected.password);
     if (!ok) {
       throw new UnauthorizedException('Invalid credentials');
     }
