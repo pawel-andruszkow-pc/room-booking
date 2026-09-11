@@ -17,6 +17,12 @@ server {
     add_header Cache-Control "no-cache";
   }
 
+  # The build stamp the tablets poll must never be served from a cache
+  location = /version.json {
+    add_header Cache-Control "no-store";
+    default_type application/json;
+  }
+
   # Hashed assets can be cached aggressively
   location /assets/ {
     expires 1y;

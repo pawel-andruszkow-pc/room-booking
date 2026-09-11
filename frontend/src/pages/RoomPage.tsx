@@ -49,6 +49,12 @@ const pairClass = 'flex w-full gap-[clamp(0.75rem,1.2vw,1.25rem)]';
 const pairButtonClass =
   'min-w-0 flex-1 px-[clamp(1rem,2.4vw,3rem)] text-[clamp(1.25rem,1.7vw,1.875rem)]';
 
+/**
+ * Below this many minutes the countdown to the next meeting turns orange, so a
+ * glance from the corridor shows the room is about to be taken.
+ */
+const MEETING_SOON_MINUTES = 15;
+
 const panelMotion = {
   initial: { opacity: 0, y: 24 },
   animate: { opacity: 1, y: 0 },
@@ -105,7 +111,7 @@ export const RoomPage = observer(function RoomPage() {
   useKiosk(device.isKiosk);
   const secretTap = useSecretTap(() => navigate('/settings'));
 
-  const [confirmEnd, setConfirmEnd] = useState(false);
+  const [confirmFree, setConfirmFree] = useState(false);
   const state = room.state;
 
   useEffect(() => {
@@ -118,17 +124,17 @@ export const RoomPage = observer(function RoomPage() {
     auth.lock();
   }, [auth]);
 
-  // The "End meeting now?" question auto-cancels after 6 s and whenever the
+  // The "Free up the room?" question auto-cancels after 6 s and whenever the
   // room stops being busy (meeting ended elsewhere, status changed).
   useEffect(() => {
-    if (!confirmEnd) return;
+    if (!confirmFree) return;
     if (state !== 'busy') {
-      setConfirmEnd(false);
+      setConfirmFree(false);
       return;
     }
-    const t = window.setTimeout(() => setConfirmEnd(false), 6000);
+    const t = window.setTimeout(() => setConfirmFree(false), 6000);
     return () => window.clearTimeout(t);
-  }, [confirmEnd, state]);
+  }, [confirmFree, state]);
 
   if (!device.isAssigned) return <UnassignedScreen />;
 
@@ -152,9 +158,9 @@ export const RoomPage = observer(function RoomPage() {
       {/* Depth without repaint cost: static radial gradient overlay. */}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_90%_at_10%_0%,rgba(255,255,255,0.18),transparent_55%),radial-gradient(90%_80%_at_100%_100%,rgba(0,0,0,0.22),transparent_60%)]" />
 
-      {/* Dims everything except the footer buttons while confirming "End meeting now?". */}
+      {/* Dims everything except the footer buttons while confirming "Free up the room?". */}
       <AnimatePresence>
-        {confirmEnd && (
+        {confirmFree && (
           <motion.div
             key="dim"
             className="absolute inset-0 z-10 bg-black/60"
@@ -162,7 +168,7 @@ export const RoomPage = observer(function RoomPage() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            onPointerDown={() => setConfirmEnd(false)}
+            onPointerDown={() => setConfirmFree(false)}
           />
         )}
       </AnimatePresence>
@@ -216,6 +222,14 @@ export const RoomPage = observer(function RoomPage() {
                     label="Next meeting"
                     value={formatDuration(room.minutesUntilNext ?? 0)}
                     at={formatTime(room.next.start, tz)}
+                    // Warm yellow reads as "about to change" against the green
+                    // screen, and keeps its distance from it in luminance —
+                    // a mid-tone orange sits at almost the same brightness as
+                    // the background and goes muddy from down the corridor.
+                    valueClassName={cn(
+                      (room.minutesUntilNext ?? Infinity) < MEETING_SOON_MINUTES &&
+                        'text-[#ffd230]',
+                    )}
                   />
                 ) : (
                   // Same two columns with nothing to count down to, so the
@@ -249,7 +263,7 @@ export const RoomPage = observer(function RoomPage() {
                     Is this meeting taking place?
                   </p>
                   <p className="mt-[clamp(0.5rem,0.8vw,1rem)] text-[clamp(1rem,1.5vw,1.625rem)] text-white/80">
-                    Room will be released in <CountdownLabel />
+                    Room will be freed up in <CountdownLabel />
                   </p>
                   <div className="mt-[clamp(1rem,1.6vw,2rem)] flex flex-wrap gap-[clamp(0.625rem,1vw,1.25rem)]">
                     <Button
@@ -265,10 +279,10 @@ export const RoomPage = observer(function RoomPage() {
                       variant="outline"
                       className={checkInButtonClass}
                       disabled={room.busy}
-                      onClick={() => act(room.release, 'Room released')}
+                      onClick={() => act(room.release, 'Room freed up')}
                     >
                       <X className="h-[1.4em] w-[1.4em] shrink-0" />
-                      Release room
+                      Free up the room
                     </Button>
                   </div>
                 </div>
@@ -301,16 +315,16 @@ export const RoomPage = observer(function RoomPage() {
 
           {/* Question rendered above the (unchanged) button row, over the dim layer. */}
           <AnimatePresence>
-            {confirmEnd && state === 'busy' && (
+            {confirmFree && state === 'busy' && (
               <motion.h2
-                key="end-question"
+                key="free-question"
                 className="absolute bottom-4 left-0 z-20 text-5xl font-bold tracking-tight"
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 8 }}
                 transition={{ duration: 0.2 }}
               >
-                End meeting now?
+                Free up the room?
               </motion.h2>
             )}
           </AnimatePresence>
@@ -344,13 +358,13 @@ export const RoomPage = observer(function RoomPage() {
               </motion.div>
             )}
             {state === 'busy' && (
-              <motion.div key="end" {...panelMotion} className="w-full">
-                <EndMeetingButton
-                  confirming={confirmEnd}
+              <motion.div key="free-room" {...panelMotion} className="w-full">
+                <FreeRoomButton
+                  confirming={confirmFree}
                   disabled={room.busy}
-                  onConfirmingChange={setConfirmEnd}
+                  onConfirmingChange={setConfirmFree}
                   onConfirm={() => {
-                    setConfirmEnd(false);
+                    setConfirmFree(false);
                     act(room.endMeeting);
                   }}
                 />
@@ -373,6 +387,7 @@ function DetailPanel({
   value,
   at,
   note,
+  valueClassName,
 }: {
   icon: LucideIcon;
   label: string;
@@ -380,6 +395,8 @@ function DetailPanel({
   at: string;
   /** Small trailing line, e.g. the meeting that follows without a break. */
   note?: string;
+  /** Extra classes for the figure, e.g. the orange "meeting soon" colour. */
+  valueClassName?: string;
 }) {
   return (
     <div className={splitRightClass}>
@@ -387,7 +404,12 @@ function DetailPanel({
         <Icon className="h-[1.15em] w-[1.15em] shrink-0" />
         {label}
       </div>
-      <div className="mt-[clamp(0.75rem,1.2vw,1.5rem)] text-[clamp(3.25rem,5.8vw,6.5rem)] font-extrabold leading-none tracking-tight">
+      <div
+        className={cn(
+          'mt-[clamp(0.75rem,1.2vw,1.5rem)] text-[clamp(3.25rem,5.8vw,6.5rem)] font-extrabold leading-none tracking-tight transition-colors duration-500',
+          valueClassName,
+        )}
+      >
         {value}
       </div>
       <div className="tabular mt-[clamp(0.5rem,0.8vw,1rem)] text-[clamp(1.75rem,2.8vw,3.25rem)] font-semibold text-white/90">
@@ -414,11 +436,15 @@ const CountdownLabel = observer(function CountdownLabel() {
 });
 
 /**
- * Two-step "End meeting" without a modal. The button row stays in place; the
- * parent dims the screen and shows the "End meeting now?" title while
+ * Two-step "Free up the room" without a modal. The button row stays in place;
+ * the parent dims the screen and shows the "Free up the room?" title while
  * `confirming` is true.
+ *
+ * The label says what the tap does to the room, not to the meeting: "End
+ * meeting" read as if it would cancel the meeting itself for everyone, which
+ * is exactly what someone standing in front of a booked room does not want.
  */
-function EndMeetingButton({
+function FreeRoomButton({
   confirming,
   disabled,
   onConfirmingChange,
@@ -432,7 +458,7 @@ function EndMeetingButton({
   if (!confirming) {
     return (
       <Button size="xl" variant="secondary" disabled={disabled} onClick={() => onConfirmingChange(true)}>
-        End meeting now
+        Free up the room
       </Button>
     );
   }
@@ -440,7 +466,7 @@ function EndMeetingButton({
     <div className={pairClass}>
       <Button size="xl" variant="primary" className={pairButtonClass} disabled={disabled} onClick={onConfirm}>
         <Check className="h-[1.2em] w-[1.2em] shrink-0" />
-        <span className="truncate">Yes, end it</span>
+        <span className="truncate">Yes, free it</span>
       </Button>
       <Button
         size="xl"

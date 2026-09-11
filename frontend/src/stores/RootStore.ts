@@ -6,6 +6,7 @@ import { ClockStore } from './ClockStore';
 import { DeviceStore } from './DeviceStore';
 import { RoomStore } from './RoomStore';
 import { ToastStore } from './ToastStore';
+import { UpdateStore } from './UpdateStore';
 
 /**
  * Why MobX (and not React context + reducers)?
@@ -23,6 +24,7 @@ export class RootStore {
   readonly room = new RoomStore(this.clock);
   readonly admin = new AdminStore();
   readonly toast = new ToastStore();
+  readonly update = new UpdateStore();
 
   /**
    * False until bootstrap() has settled. The app renders a loader until then so
@@ -42,6 +44,7 @@ export class RootStore {
         room: false,
         admin: false,
         toast: false,
+        update: false,
       },
       { autoBind: true },
     );
@@ -62,6 +65,8 @@ export class RootStore {
       },
     });
     this.clock.start();
+    // Tablets run unattended, so a deploy has to reach them on its own.
+    this.update.start();
   }
 
   /**

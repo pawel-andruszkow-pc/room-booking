@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'motion/react';
 import { useStores } from '@/stores/StoreContext';
+import { AppUpdater } from '@/components/AppUpdater';
 import { RequireAuth } from '@/components/RequireAuth';
 import { PageTransition } from '@/components/PageTransition';
 import { Toaster } from '@/components/ui/toaster';
@@ -101,6 +102,7 @@ export const App = observer(function App() {
         </Routes>
       </AnimatePresence>
       <Toaster />
+      <AppUpdater />
     </div>
   );
 });

@@ -61,6 +61,15 @@ schema never serves traffic.
     redeploy.
 - The container listens on the Railway-assigned `PORT` (default 8080).
 
+### Tablets update themselves
+
+The build writes `dist/version.json` with a build id (Railway's
+`RAILWAY_GIT_COMMIT_SHA` when it is passed as a build arg, otherwise the build
+timestamp) and nginx serves it uncached. Every tablet polls it once a minute
+and reloads itself into the new build while the screen is idle, so a deploy
+does not need anyone to walk up to the kiosks. Nothing to configure — just make
+sure `BUILD_ID` is *not* pinned to a constant value.
+
 ## 4. After deploy
 
 1. Open the frontend URL on the tablet, sign in with the Basic credentials.

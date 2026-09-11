@@ -15,8 +15,8 @@ on the spot, end a meeting early, or confirm they actually showed up.
 | Screen | What it does |
 | --- | --- |
 | **Room** | Green “Free” with next meeting (or “No more meetings today”), orange with event title + time slot when busy. Clock always visible. |
-| **Today** | Ghost button in the corner opens a whole-day view: a 07–20 time strip with busy blocks and a “now” marker, plus the meeting list (past ones dimmed). |
-| **Book** | Dedicated page with 15 min – 2 h presets (15-minute steps) and a custom slider. Only durations that fit before the next meeting are enabled. |
+| **Today** | Ghost button in the corner opens a whole-day view: a vertical time scale (full hours as the main unit, half hours secondary) with each meeting drawn as a rectangle the length of its slot, past ones dimmed and a “now” marker across the current one. |
+| **Book** | Two sections side by side: **Book this room now** (15 min – 2 h presets plus a slider, only durations that fit before the next meeting) and **Reserve for later today** (pick the hour, the quarter past it and a length; slots that clash with an existing meeting are disabled). A reservation is *not* checked in on booking, so the presence prompt still releases it if nobody turns up. |
 | **End meeting** | Two-step inline confirmation; shortens the calendar event to *now*. |
 | **Presence check** | When a meeting starts the tablet asks “Is this meeting taking place?”. If nobody taps **Yes** within 15 min (configurable) the room is released — on the tablet, and by a server cron job as a safety net. |
 | **Settings** (PIN) | Assign this device to a room, name it, switch on **kiosk mode** (fullscreen, wake lock, no cursor). Tap the clock 5× to reach it from kiosk mode. |
@@ -157,6 +157,14 @@ admin edits) updates the screen immediately with the predicted result; the
 server response then replaces the prediction and a failure rolls back with a
 toast. `RoomStore` bumps a version on each action so a status poll that was
 already in flight cannot overwrite the newer state.
+
+**Self-updating kiosks.** Tablets run fullscreen with nobody to press reload,
+so every build writes its identity to `/version.json` (`vite.config.ts`) and
+inlines the same id in the bundle. `UpdateStore` polls that file once a minute
+and reloads the page when the two differ — but only while the screen is idle
+(20 s untouched), online, and showing the room or day view, so a reload never
+interrupts someone mid-booking. A deploy therefore reaches every tablet within
+about a minute without touching them.
 
 **Auth model.** All tablets share one HTTP Basic credential (page + API). Two
 PINs separate roles on a shared screen: the *settings PIN* lets someone assign

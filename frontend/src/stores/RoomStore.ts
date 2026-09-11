@@ -244,6 +244,18 @@ export class RoomStore {
     );
   }
 
+  /**
+   * Books a slot later today. Unlike a walk-in there is nothing to predict —
+   * the room stays free until that time comes — so this one simply applies the
+   * status the server returns.
+   */
+  async reserve(startsAt: Date, durationMinutes: number, title?: string): Promise<void> {
+    await this.mutate(
+      (s) => s,
+      (id) => api.rooms.reserve(id, startsAt.toISOString(), durationMinutes, title),
+    );
+  }
+
   async endMeeting(): Promise<void> {
     const eventId = this.current?.id;
     if (!eventId) return;

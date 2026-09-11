@@ -8,6 +8,12 @@ COPY . .
 # API URL is baked in at build time (Vite env). Override on Railway via build arg.
 ARG VITE_API_URL
 ENV VITE_API_URL=$VITE_API_URL
+# Identifies this build for the kiosk auto-reload (see src/stores/UpdateStore).
+# Railway passes RAILWAY_GIT_COMMIT_SHA; without it the build timestamp is used.
+ARG BUILD_ID
+ARG RAILWAY_GIT_COMMIT_SHA
+ENV BUILD_ID=$BUILD_ID
+ENV RAILWAY_GIT_COMMIT_SHA=$RAILWAY_GIT_COMMIT_SHA
 RUN pnpm run build
 
 # --- Serve stage ---

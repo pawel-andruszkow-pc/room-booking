@@ -99,7 +99,7 @@ export const SecurityTab = observer(function SecurityTab() {
           <div className="flex items-center justify-between rounded-2xl bg-white/5 p-5">
             <div>
               <div className="text-lg font-semibold">Ask for presence confirmation</div>
-              <div className="text-white/60">Release the room when nobody confirms in time.</div>
+              <div className="text-white/60">Free up the room when nobody confirms in time.</div>
             </div>
             <Switch checked={checkInEnabled} onCheckedChange={setCheckInEnabled} />
           </div>

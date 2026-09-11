@@ -35,6 +35,9 @@ const MIN_EVENT_MINUTES = 1;
 /** Meetings starting within this many ms of the previous end count as back-to-back. */
 const BACK_TO_BACK_TOLERANCE_MS = 60_000;
 
+/** A start time this close to now is treated as "now" rather than a reservation. */
+const START_NOW_TOLERANCE_MS = 60_000;
+
 @Injectable()
 export class BookingsService {
   private readonly logger = new Logger(BookingsService.name);
@@ -137,21 +140,45 @@ export class BookingsService {
   }
 
   /** Creates an ad-hoc meeting starting now. Presence is implicitly confirmed. */
+  /**
+   * Books the room, either from now ("book this room now") or for a slot later
+   * today when `startsAt` is given.
+   *
+   * The two differ in more than the start time: a walk-in is checked in on the
+   * spot, because the people asking for the room are standing at the tablet.
+   * A reservation made in advance is not — it goes through the normal presence
+   * prompt when it starts, so a slot nobody turns up for is released again.
+   */
   async book(roomId: string, dto: BookRoomDto, deviceId?: string): Promise<RoomStatus> {
     const status = await this.getStatus(roomId, { fromDevice: true });
-    if (status.current) {
-      throw new ConflictException('Room is busy');
-    }
-    if (dto.durationMinutes > status.availableMinutes) {
-      throw new ConflictException(
-        `Only ${status.availableMinutes} minutes are available before the next meeting`,
-      );
+    const now = new Date();
+    const scheduled = dto.startsAt ? new Date(dto.startsAt) : null;
+    // A reservation for (nearly) now is a walk-in: the tablet may have had the
+    // time on screen for a few seconds before the tap landed. Only that narrow
+    // window counts — a start further in the past is a mistake to reject, not
+    // a booking to quietly move to the current time.
+    const immediate =
+      !scheduled ||
+      Math.abs(scheduled.getTime() - now.getTime()) <= START_NOW_TOLERANCE_MS;
+    const start = immediate ? now : scheduled;
+    const end = addMinutes(start, dto.durationMinutes);
+
+    if (immediate) {
+      if (status.current) {
+        throw new ConflictException('Room is busy');
+      }
+      if (dto.durationMinutes > status.availableMinutes) {
+        throw new ConflictException(
+          `Only ${status.availableMinutes} minutes are available before the next meeting`,
+        );
+      }
+    } else {
+      await this.assertSlotIsFree(status.room, start, end, now);
     }
 
-    const start = new Date();
-    const end = addMinutes(start, dto.durationMinutes);
     const deviceName = deviceId ? await this.deviceName(deviceId) : null;
-    const title = dto.title?.trim() || 'Walk-in meeting';
+    const title =
+      dto.title?.trim() || (immediate ? 'Walk-in meeting' : 'Room reservation');
 
     const event = await this.calendar.createEvent(status.room.calendarId, {
       title,
@@ -159,14 +186,42 @@ export class BookingsService {
       start,
       end,
     });
-    await this.upsertCheckIn(roomId, event, { confirmedAt: start });
+    if (immediate) await this.upsertCheckIn(roomId, event, { confirmedAt: start });
     // Other tablets on this room should not wait for the next tick or for Google.
     this.changes.notify(status.room.calendarId);
     this.logger.log(
-      `Booked "${title}" in ${status.room.name} for ${dto.durationMinutes} min`,
+      `Booked "${title}" in ${status.room.name} for ${dto.durationMinutes} min` +
+        (immediate ? '' : ` starting ${start.toISOString()}`),
     );
 
     return this.getStatus(roomId, { fromDevice: true });
+  }
+
+  /**
+   * A slot booked in advance has to be today, still ahead, and clear of every
+   * meeting already in the calendar — the walk-in path's "minutes until the
+   * next meeting" check says nothing about a gap later in the day.
+   */
+  private async assertSlotIsFree(
+    room: Pick<Room, 'calendarId'>,
+    start: Date,
+    end: Date,
+    now: Date,
+  ): Promise<void> {
+    const settings = await this.settings.get();
+    const { dayEnd } = this.dayBounds(now, settings.timezone);
+    if (start <= now) {
+      throw new BadRequestException('That time has already passed');
+    }
+    if (end > dayEnd) {
+      throw new BadRequestException('A booking has to end on the same day');
+    }
+
+    const events = await this.todaysEvents(room, now, settings.timezone);
+    const clash = events.find((e) => toDate(e.start) < end && toDate(e.end) > start);
+    if (clash) {
+      throw new ConflictException(`Overlaps "${clash.title}"`);
+    }
   }
 
   /** "End meeting": shortens the running event so the room frees up immediately. */
@@ -291,7 +346,7 @@ export class BookingsService {
   }
 
   private async todaysEvents(
-    room: Room,
+    room: Pick<Room, 'calendarId'>,
     now: Date,
     timezone: string,
   ): Promise<CalendarEvent[]> {

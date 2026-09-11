@@ -52,6 +52,12 @@ export const api = {
         method: 'POST',
         body: { durationMinutes, title: title || undefined },
       }),
+    /** Same endpoint, for a slot later today rather than from now. */
+    reserve: (id: string, startsAt: string, durationMinutes: number, title?: string) =>
+      request<RoomStatus>(`/rooms/${id}/book`, {
+        method: 'POST',
+        body: { startsAt, durationMinutes, title: title || undefined },
+      }),
     end: (id: string, eventId: string) =>
       request<RoomStatus>(`/rooms/${id}/end`, { method: 'POST', body: { eventId } }),
     checkIn: (id: string, eventId: string) =>
