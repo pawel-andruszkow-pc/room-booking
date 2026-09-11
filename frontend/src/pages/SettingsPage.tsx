@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useNavigate } from 'react-router-dom';
-import { Expand, LogOut, Lock, Save } from 'lucide-react';
+import { LogOut, Lock, Save } from 'lucide-react';
 import { useStores } from '@/stores/StoreContext';
-import { useKiosk } from '@/hooks/useKiosk';
 import { PageShell } from '@/components/PageShell';
 import { PinGate } from '@/components/PinGate';
 import { Button } from '@/components/ui/button';
@@ -17,7 +16,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import { Spinner } from '@/components/ui/spinner';
 
 const NONE = '__none__';
@@ -36,13 +34,11 @@ export function SettingsPage() {
 
 /** Assign this tablet to a room and switch kiosk mode on. */
 const SettingsForm = observer(function SettingsForm() {
-  const { device, admin, auth, room, toast } = useStores();
+  const { device, admin, auth, room, toast, update } = useStores();
   const navigate = useNavigate();
-  const { requestFullscreen } = useKiosk(false);
 
   const [name, setName] = useState(device.device?.name ?? '');
   const [roomId, setRoomId] = useState<string>(device.roomId ?? NONE);
-  const [isKiosk, setIsKiosk] = useState(device.isKiosk);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -51,8 +47,7 @@ const SettingsForm = observer(function SettingsForm() {
 
   const dirty =
     name !== (device.device?.name ?? '') ||
-    (roomId === NONE ? null : roomId) !== device.roomId ||
-    isKiosk !== device.isKiosk;
+    (roomId === NONE ? null : roomId) !== device.roomId;
 
   // Optimistic: DeviceStore applies the assignment locally first, so the room
   // screen can open immediately; a failure restores the previous assignment.
@@ -63,14 +58,12 @@ const SettingsForm = observer(function SettingsForm() {
         {
           name: name.trim() || undefined,
           roomId: roomId === NONE ? null : roomId,
-          isKiosk,
         },
         admin.rooms,
       )
       .then(() => toast.success('Device settings saved'))
       .catch((err: Error) => toast.error('Could not save, reverted', err.message))
       .finally(() => setSaving(false));
-    if (isKiosk) void requestFullscreen();
     if (roomId !== NONE) navigate('/');
   };
 
@@ -89,7 +82,7 @@ const SettingsForm = observer(function SettingsForm() {
         <Card>
           <CardTitle>This device</CardTitle>
           <CardDescription>
-            Assign a room and decide whether this is a wall-mounted tablet.
+            Assign the room this tablet is mounted next to.
           </CardDescription>
 
           <div className="mt-8 space-y-8">
@@ -124,24 +117,11 @@ const SettingsForm = observer(function SettingsForm() {
                 <p className="mt-2 text-white/50">No rooms yet — create them on the admin page.</p>
               )}
             </div>
-
-            <div className="flex items-center justify-between rounded-2xl bg-white/5 p-6">
-              <div>
-                <div className="text-xl font-semibold">This device is a tablet (kiosk mode)</div>
-                <div className="text-white/60">
-                  Fullscreen, screen always on, no cursor. Tap the clock 5 times to come back here.
-                </div>
-              </div>
-              <Switch checked={isKiosk} onCheckedChange={setIsKiosk} aria-label="Kiosk mode" />
-            </div>
           </div>
 
-          <div className="mt-10 flex gap-4">
+          <div className="mt-10">
             <Button size="lg" variant="accent" disabled={!dirty || saving} onClick={save}>
               {saving ? <Spinner /> : <Save className="h-6 w-6" />} Save
-            </Button>
-            <Button size="lg" variant="secondary" onClick={() => void requestFullscreen()}>
-              <Expand className="h-6 w-6" /> Enter fullscreen
             </Button>
           </div>
         </Card>
@@ -162,6 +142,32 @@ const SettingsForm = observer(function SettingsForm() {
             >
               <LogOut className="h-6 w-6" /> Sign out on this device
             </Button>
+          </Card>
+
+          <Card>
+            <CardTitle>This build</CardTitle>
+            <CardDescription>
+              Tablets reload themselves within a minute of a deploy, so this is how
+              to tell whether one has picked it up.
+            </CardDescription>
+            <dl className="mt-6 space-y-4 text-lg">
+              <div className="flex items-baseline justify-between gap-4">
+                <dt className="text-white/60">Version</dt>
+                <dd className="tabular font-semibold">{update.buildId}</dd>
+              </div>
+              {update.available && update.serverBuildId && (
+                <div className="flex items-baseline justify-between gap-4">
+                  <dt className="text-white/60">Update waiting</dt>
+                  <dd className="tabular font-semibold text-attention">
+                    {update.serverBuildId}
+                  </dd>
+                </div>
+              )}
+              <div className="flex items-baseline justify-between gap-4">
+                <dt className="shrink-0 text-white/60">Device id</dt>
+                <dd className="tabular truncate text-white/60">{device.deviceId}</dd>
+              </div>
+            </dl>
           </Card>
         </div>
       </div>
