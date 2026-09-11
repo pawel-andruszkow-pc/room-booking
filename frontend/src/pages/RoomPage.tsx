@@ -57,12 +57,13 @@ const pairButtonClass =
  */
 const MEETING_SOON_MINUTES = 15;
 
-const panelMotion = {
-  initial: { opacity: 0, y: 24 },
+/** Footer action panel. Instant on this tablet's own taps, like the headline. */
+const panelMotion = (instant: boolean) => ({
+  initial: instant ? { opacity: 1, y: 0 } : { opacity: 0, y: 24 },
   animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -24 },
-  transition: { duration: 0.3, ease: 'easeOut' as const },
-};
+  exit: instant ? { opacity: 0 } : { opacity: 0, y: -24 },
+  transition: { duration: instant ? 0 : 0.3, ease: 'easeOut' as const },
+});
 
 /**
  * State panels only cross-fade; the headline carries the movement. The
@@ -340,11 +341,15 @@ export const RoomPage = observer(function RoomPage() {
         <footer className="relative z-20 flex h-28 w-full max-w-[52%] min-w-0 items-end">
           <AnimatePresence mode="wait" initial={false}>
             {state === 'free' && status && (
-              <motion.div key="book" {...panelMotion}>
+              <motion.div key="book" {...panelMotion(instant)}>
+                {/* Not disabled while the tap that freed the room is still
+                    being confirmed: that made the button sit dimmed for the
+                    round trip and swallow the next tap. The booking page
+                    copes with a request in flight on its own. */}
                 <Button
                   size="xl"
                   onClick={() => navigate('/book')}
-                  disabled={room.busy || room.availableMinutes < 5}
+                  disabled={room.availableMinutes < 5}
                 >
                   <CalendarPlus className="h-9 w-9" />
                   Book this room
@@ -352,7 +357,7 @@ export const RoomPage = observer(function RoomPage() {
               </motion.div>
             )}
             {state === 'busy' && (
-              <motion.div key="free-room" {...panelMotion} className="w-full">
+              <motion.div key="free-room" {...panelMotion(instant)} className="w-full">
                 <FreeRoomButton
                   confirming={confirmFree}
                   disabled={room.busy}
@@ -451,9 +456,13 @@ function FreeRoomButton({
 }) {
   if (!confirming) {
     return (
+      // Not dimmed while the booking that made the room busy is still being
+      // confirmed: the store ignores a tap during those few hundred ms anyway,
+      // and a button that fades in at 40% and then snaps to full reads as a glitch.
       <Button
         size="xl"
         variant="primary"
+        className="disabled:opacity-100"
         disabled={disabled}
         onClick={() => onConfirmingChange(true)}
       >

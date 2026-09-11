@@ -1,7 +1,8 @@
-import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { observer } from 'mobx-react-lite';
 import { useNavigate } from 'react-router-dom';
+import { AnimatePresence, motion } from 'motion/react';
 import * as Slider from '@radix-ui/react-slider';
 import { Check, ChevronLeft, ChevronRight, Clock3, Minus, Plus, Zap } from 'lucide-react';
 import { useStores } from '@/stores/StoreContext';
@@ -35,16 +36,29 @@ const WINDOW_UNITS = (WINDOW_TO_HOUR - WINDOW_FROM_HOUR) * HOUR_UNITS;
 const chipOn = 'bg-emerald-400 text-ink shadow-lg shadow-emerald-900/30';
 const chipOff = 'bg-white/10 hover:bg-white/15';
 const chipClass =
-  'rounded-2xl font-bold transition-[transform,background-color,color] duration-150 active:scale-95 disabled:cursor-not-allowed disabled:opacity-25';
+  'rounded-2xl font-bold transition-[background-color,color] duration-150 disabled:cursor-not-allowed disabled:opacity-25';
 
 /** The −5 / +5 nudges beside a pin, and the arrows either side of the track. */
 const nudgeClass =
   'flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-white/10 transition-[transform,background-color] duration-150 hover:bg-white/15 active:scale-90 disabled:cursor-not-allowed disabled:opacity-20';
 
+/**
+ * The action row belongs to the page, not to the views: it stays at the bottom
+ * and only its labels change when the view above it is swapped.
+ */
+const actionsClass = 'mt-auto flex shrink-0 gap-4 pt-2';
+
 type Mode = 'quick' | 'time';
 
 /** What a view asks the page to book. */
 type Booking = { startAt: Date; minutes: number; immediate: boolean };
+
+/**
+ * What the confirm button offers right now. Each view reports its own, so the
+ * button can live outside the views — it changes label only, never position,
+ * while the view under it animates. `book` is null when nothing can be booked.
+ */
+type Proposal = { label: string; book: (() => Booking) | null };
 
 /**
  * Two ways to take the room, one at a time:
@@ -63,6 +77,7 @@ export const BookPage = observer(function BookPage() {
   const navigate = useNavigate();
   const [mode, setMode] = useState<Mode>('quick');
   const [busy, setBusy] = useState(false);
+  const [proposal, setProposal] = useState<Proposal | null>(null);
   /** Set the moment the user confirms; freezes the page while it fades out. */
   const submitted = useRef(false);
   const redirected = useRef(false);
@@ -121,25 +136,37 @@ export const BookPage = observer(function BookPage() {
       });
   };
 
-  /** Sits to the left of the confirm button in both views. */
-  const modeSwitch = (
-    <Button
-      variant="secondary"
-      size="xl"
-      className="min-w-0 flex-1 basis-0"
-      disabled={busy}
-      onClick={() => setMode(mode === 'quick' ? 'time' : 'quick')}
-    >
-      {mode === 'quick' ? (
-        <>
-          <Clock3 className="h-8 w-8" /> Pick a time
-        </>
-      ) : (
-        <>
-          <Zap className="h-8 w-8" /> Quick booking
-        </>
-      )}
-    </Button>
+  const actions = (
+    <div className={actionsClass}>
+      <Button
+        variant="secondary"
+        size="xl"
+        className="min-w-0 flex-1 basis-0"
+        disabled={busy}
+        onClick={() => setMode(mode === 'quick' ? 'time' : 'quick')}
+      >
+        {mode === 'quick' ? (
+          <>
+            <Clock3 className="h-8 w-8" /> Pick a time
+          </>
+        ) : (
+          <>
+            <Zap className="h-8 w-8" /> Quick booking
+          </>
+        )}
+      </Button>
+      <Button
+        size="xl"
+        variant="success"
+        className="min-w-0 flex-1 basis-0"
+        disabled={busy || !proposal?.book}
+        aria-busy={busy}
+        onClick={() => proposal?.book && book(proposal.book())}
+      >
+        {busy ? <Spinner className="h-8 w-8" /> : <Check className="h-9 w-9" />}
+        {proposal?.label ?? 'Pick a length'}
+      </Button>
+    </div>
   );
 
   return (
@@ -162,26 +189,38 @@ export const BookPage = observer(function BookPage() {
         <div className="flex justify-center py-20">
           <Spinner className="h-10 w-10" />
         </div>
-      ) : mode === 'quick' ? (
-        <QuickBooking
-          available={available}
-          tz={tz}
-          busy={busy}
-          modeSwitch={modeSwitch}
-          onBook={book}
-        />
       ) : (
-        <TimePicker
-          dayStart={day.start}
-          dayEnd={day.end}
-          nowMs={clock.now.getTime()}
-          events={status.events}
-          maxMinutes={status.settings.maxBookingMinutes}
-          tz={tz}
-          busy={busy}
-          modeSwitch={modeSwitch}
-          onBook={book}
-        />
+        <div className="flex flex-1 flex-col">
+          {/* Only the view fades — opacity alone, compositor work, no layout —
+              and the outgoing one is gone before the incoming one mounts, so
+              the two are never drawn together. The action row below is not
+              part of it: it stays put and only its labels change. */}
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={mode}
+              className="flex flex-1 flex-col"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1, transition: { duration: 0.15, ease: 'easeOut' } }}
+              exit={{ opacity: 0, transition: { duration: 0.1, ease: 'easeIn' } }}
+            >
+              {mode === 'quick' ? (
+                <QuickBooking available={available} busy={busy} onProposal={setProposal} />
+              ) : (
+                <TimePicker
+                  dayStart={day.start}
+                  dayEnd={day.end}
+                  nowMs={clock.now.getTime()}
+                  events={status.events}
+                  maxMinutes={status.settings.maxBookingMinutes}
+                  tz={tz}
+                  busy={busy}
+                  onProposal={setProposal}
+                />
+              )}
+            </motion.div>
+          </AnimatePresence>
+          {actions}
+        </div>
       )}
     </PageShell>
   );
@@ -190,18 +229,13 @@ export const BookPage = observer(function BookPage() {
 /** Predefined lengths, starting now. */
 const QuickBooking = observer(function QuickBooking({
   available,
-  tz,
   busy,
-  modeSwitch,
-  onBook,
+  onProposal,
 }: {
   available: number;
-  tz: string;
   busy: boolean;
-  modeSwitch: ReactNode;
-  onBook: (booking: Booking) => void;
+  onProposal: (proposal: Proposal) => void;
 }) {
-  const { clock } = useStores();
   const [picked, setPicked] = useState<number | null>(null);
   const fits = (m: number) => m <= available;
 
@@ -212,6 +246,19 @@ const QuickBooking = observer(function QuickBooking({
   const fallback = QUICK_MINUTES.filter(fits).pop() ?? null;
   const minutes =
     picked !== null && fits(picked) ? picked : fits(DEFAULT_MINUTES) ? DEFAULT_MINUTES : fallback;
+
+  // The start is taken at the tap, not here: a tile picked a while ago still
+  // books "from now".
+  useEffect(() => {
+    onProposal(
+      minutes === null
+        ? { label: 'Pick a length', book: null }
+        : {
+            label: `Book now for ${formatDuration(minutes)}`,
+            book: () => ({ startAt: new Date(), minutes, immediate: true }),
+          },
+    );
+  }, [minutes, onProposal]);
 
   return (
     // The header is a fixed height and the actions sit at the bottom; the
@@ -248,33 +295,6 @@ const QuickBooking = observer(function QuickBooking({
           })}
         </div>
       </div>
-
-      <div>
-        <div className="mt-2 flex gap-4">
-          {modeSwitch}
-          <Button
-            size="xl"
-            variant="success"
-            className="min-w-0 flex-1 basis-0"
-            disabled={busy || minutes === null}
-            aria-busy={busy}
-            onClick={() =>
-              minutes !== null && onBook({ startAt: new Date(), minutes, immediate: true })
-            }
-          >
-            {busy ? <Spinner className="h-8 w-8" /> : <Check className="h-9 w-9" />}
-            {minutes === null ? 'Pick a length' : `Book now for ${formatDuration(minutes)}`}
-          </Button>
-        </div>
-        {minutes !== null && (
-          <p className="mt-4 text-center text-xl text-white/60">
-            Ends at{' '}
-            <span className="tabular font-semibold text-white">
-              {formatTime(new Date(+clock.now + minutes * 60_000), tz)}
-            </span>
-          </p>
-        )}
-      </div>
     </div>
   );
 });
@@ -293,8 +313,7 @@ function TimePicker({
   maxMinutes,
   tz,
   busy,
-  modeSwitch,
-  onBook,
+  onProposal,
 }: {
   dayStart: number;
   dayEnd: number;
@@ -304,8 +323,7 @@ function TimePicker({
   maxMinutes: number | null;
   tz: string;
   busy: boolean;
-  modeSwitch: ReactNode;
-  onBook: (booking: Booking) => void;
+  onProposal: (proposal: Proposal) => void;
 }) {
   const total = Math.max(1, Math.floor((dayEnd - dayStart) / UNIT_MS));
   const maxUnits = maxMinutes === null ? total : Math.max(1, Math.floor(maxMinutes / UNIT_MINUTES));
@@ -408,101 +426,103 @@ function TimePicker({
     setRange([first, Math.min(first + length, nextBlock(first), first + maxUnits, end)]);
   };
 
-  if (firstFree === null) {
+  const startMs = startAt.getTime();
+  const endMs = endAt.getTime();
+  const none = firstFree === null;
+  useEffect(() => {
+    if (none || minutes < UNIT_MINUTES) {
+      onProposal({ label: none ? 'No free time' : 'Pick a time', book: null });
+      return;
+    }
+    const start = new Date(startMs);
+    onProposal({
+      label: immediate
+        ? `Book now for ${formatDuration(minutes)}`
+        : `Reserve ${formatTime(start, tz)} – ${formatTime(new Date(endMs), tz)}`,
+      book: () => ({ startAt: start, minutes, immediate }),
+    });
+  }, [none, immediate, minutes, startMs, endMs, tz, onProposal]);
+
+  if (none) {
     return <p className="text-3xl text-white/60">No free time left today.</p>;
   }
 
   return (
-    <div className="flex flex-col gap-12">
-      <div className="flex items-end justify-center gap-[clamp(1.5rem,4vw,5rem)]">
-        <Pin
-          label="From"
-          value={immediate ? 'Now' : formatTime(startAt, tz)}
-          onMinus={() => setFrom(from - 1)}
-          onPlus={() => setFrom(from + 1)}
-          minusDisabled={busy || from <= nowUnit || !isFree(from - 1)}
-          plusDisabled={busy || from + 1 >= to || !isFree(from + 1)}
-        />
-        <div className="w-60 shrink-0 pb-6 text-center">
-          <div className="text-lg uppercase tracking-[0.2em] text-white/50">Duration</div>
-          <div className="tabular mt-1 whitespace-nowrap text-4xl font-extrabold text-emerald-400">
-            {formatDuration(minutes)}
+    <div className="flex flex-1 flex-col">
+      <div className="flex flex-1 flex-col justify-center gap-12 py-[clamp(1rem,4vh,3rem)]">
+        <div className="flex items-end justify-center gap-[clamp(1.5rem,4vw,5rem)]">
+          <Pin
+            label="From"
+            value={immediate ? 'Now' : formatTime(startAt, tz)}
+            onMinus={() => setFrom(from - 1)}
+            onPlus={() => setFrom(from + 1)}
+            minusDisabled={busy || from <= nowUnit || !isFree(from - 1)}
+            plusDisabled={busy || from + 1 >= to || !isFree(from + 1)}
+          />
+          <div className="w-60 shrink-0 pb-6 text-center">
+            <div className="text-lg uppercase tracking-[0.2em] text-white/50">Duration</div>
+            <div className="tabular mt-1 whitespace-nowrap text-4xl font-extrabold text-emerald-400">
+              {formatDuration(minutes)}
+            </div>
           </div>
+          <Pin
+            label="To"
+            value={formatTime(endAt, tz)}
+            onMinus={() => setTo(to - 1)}
+            onPlus={() => setTo(to + 1)}
+            minusDisabled={busy || to - 1 <= from}
+            plusDisabled={busy || to + 1 > limit}
+          />
         </div>
-        <Pin
-          label="To"
-          value={formatTime(endAt, tz)}
-          onMinus={() => setTo(to - 1)}
-          onPlus={() => setTo(to + 1)}
-          minusDisabled={busy || to - 1 <= from}
-          plusDisabled={busy || to + 1 > limit}
-        />
-      </div>
 
-      <div className="flex items-start gap-4">
-        <button
-          type="button"
-          className={cn(nudgeClass, 'mt-1')}
-          disabled={busy || windowStart === 0}
-          onClick={() => shiftWindow(-HOUR_UNITS)}
-          aria-label="Earlier hours"
-        >
-          <ChevronLeft className="h-7 w-7" />
-        </button>
-
-        <div className="min-w-0 flex-1">
-          <Slider.Root
-            className="relative flex h-16 w-full touch-none select-none items-center"
-            min={windowStart}
-            max={windowEnd}
-            step={1}
-            minStepsBetweenThumbs={1}
-            value={range}
-            disabled={busy}
-            onValueChange={onSlide}
+        <div className="flex items-start gap-4">
+          <button
+            type="button"
+            className={cn(nudgeClass, 'mt-1')}
+            disabled={busy || windowStart === 0}
+            onClick={() => shiftWindow(-HOUR_UNITS)}
+            aria-label="Earlier hours"
           >
-            <Slider.Track className="relative h-6 grow overflow-hidden rounded-full bg-white/10">
-              <BlockedSpans blocked={blocked} from={windowStart} to={windowEnd} />
-              <Slider.Range className="absolute h-full bg-emerald-400" />
-            </Slider.Track>
-            <Slider.Thumb
-              className="block h-14 w-14 rounded-full bg-white shadow-lg ring-4 ring-emerald-400/30 focus:outline-none"
-              aria-label="From"
-            />
-            <Slider.Thumb
-              className="block h-14 w-14 rounded-full bg-white shadow-lg ring-4 ring-emerald-400/30 focus:outline-none"
-              aria-label="To"
-            />
-          </Slider.Root>
-          <HourTicks dayStart={dayStart} from={windowStart} to={windowEnd} tz={tz} />
+            <ChevronLeft className="h-7 w-7" />
+          </button>
+
+          <div className="min-w-0 flex-1">
+            <Slider.Root
+              className="relative flex h-16 w-full touch-none select-none items-center"
+              min={windowStart}
+              max={windowEnd}
+              step={1}
+              minStepsBetweenThumbs={1}
+              value={range}
+              disabled={busy}
+              onValueChange={onSlide}
+            >
+              <Slider.Track className="relative h-6 grow overflow-hidden rounded-full bg-white/10">
+                <BlockedSpans blocked={blocked} from={windowStart} to={windowEnd} />
+                <Slider.Range className="absolute h-full bg-emerald-400" />
+              </Slider.Track>
+              <Slider.Thumb
+                className="block h-14 w-14 rounded-full bg-white shadow-lg ring-4 ring-emerald-400/30 focus:outline-none"
+                aria-label="From"
+              />
+              <Slider.Thumb
+                className="block h-14 w-14 rounded-full bg-white shadow-lg ring-4 ring-emerald-400/30 focus:outline-none"
+                aria-label="To"
+              />
+            </Slider.Root>
+            <HourTicks dayStart={dayStart} from={windowStart} to={windowEnd} tz={tz} />
+          </div>
+
+          <button
+            type="button"
+            className={cn(nudgeClass, 'mt-1')}
+            disabled={busy || windowStart >= lastWindow}
+            onClick={() => shiftWindow(HOUR_UNITS)}
+            aria-label="Later hours"
+          >
+            <ChevronRight className="h-7 w-7" />
+          </button>
         </div>
-
-        <button
-          type="button"
-          className={cn(nudgeClass, 'mt-1')}
-          disabled={busy || windowStart >= lastWindow}
-          onClick={() => shiftWindow(HOUR_UNITS)}
-          aria-label="Later hours"
-        >
-          <ChevronRight className="h-7 w-7" />
-        </button>
-      </div>
-
-      <div className="mt-2 flex gap-4">
-        {modeSwitch}
-        <Button
-          size="xl"
-          variant="success"
-          className="min-w-0 flex-1 basis-0"
-          disabled={busy || minutes < UNIT_MINUTES}
-          aria-busy={busy}
-          onClick={() => onBook({ startAt, minutes, immediate })}
-        >
-          {busy ? <Spinner className="h-8 w-8" /> : <Check className="h-9 w-9" />}
-          {immediate
-            ? `Book now for ${formatDuration(minutes)}`
-            : `Reserve ${formatTime(startAt, tz)} – ${formatTime(endAt, tz)}`}
-        </Button>
       </div>
     </div>
   );

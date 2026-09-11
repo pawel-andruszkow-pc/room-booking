@@ -33,6 +33,8 @@ export class RoomStore {
   changedByUser = false;
 
   private pollTimer: number | null = null;
+  /** The action currently on the wire; the next one waits for it. */
+  private pending: Promise<void> | null = null;
   private abort: AbortController | null = null;
   /** Aborts the SSE subscription when the room changes or the store stops. */
   private streamAbort: AbortController | null = null;
@@ -45,10 +47,18 @@ export class RoomStore {
   constructor(private readonly clock: ClockStore) {
     makeAutoObservable<
       this,
-      'pollTimer' | 'abort' | 'streamAbort' | 'disposers' | 'clock' | 'version' | 'ownBookings'
+      | 'pollTimer'
+      | 'abort'
+      | 'streamAbort'
+      | 'disposers'
+      | 'clock'
+      | 'version'
+      | 'ownBookings'
+      | 'pending'
     >(
       this,
       {
+        pending: false,
         pollTimer: false,
         abort: false,
         streamAbort: false,
@@ -289,7 +299,24 @@ export class RoomStore {
     predict: (status: RoomStatus) => RoomStatus,
     send: (roomId: string) => Promise<RoomStatus>,
   ): Promise<void> {
-    if (!this.roomId || this.busy) return;
+    // A second action while one is in flight (free the room, then book it
+    // again within the round trip) queues behind it instead of being dropped.
+    while (this.pending) await this.pending.catch(() => undefined);
+    if (!this.roomId) return;
+    const run = this.runMutation(predict, send);
+    this.pending = run;
+    try {
+      await run;
+    } finally {
+      if (this.pending === run) this.pending = null;
+    }
+  }
+
+  private async runMutation(
+    predict: (status: RoomStatus) => RoomStatus,
+    send: (roomId: string) => Promise<RoomStatus>,
+  ): Promise<void> {
+    if (!this.roomId) return;
     const roomId = this.roomId;
     const snapshot = this.status;
 
