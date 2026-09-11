@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import * as Slider from '@radix-ui/react-slider';
 import { Check, ChevronLeft, ChevronRight, Clock3, Minus, Plus, Zap } from 'lucide-react';
 import { useStores } from '@/stores/StoreContext';
+import { IDLE_RETURN_MS, useIdleReturn } from '@/hooks/useIdleReturn';
 import { PageShell } from '@/components/PageShell';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -64,6 +65,10 @@ export const BookPage = observer(function BookPage() {
   /** Set the moment the user confirms; freezes the page while it fades out. */
   const submitted = useRef(false);
   const redirected = useRef(false);
+
+  // A picker left mid-way should not greet the next person; a request in
+  // flight finishes (and navigates) on its own, so the countdown pauses then.
+  useIdleReturn(IDLE_RETURN_MS, !busy);
 
   useEffect(() => {
     if (device.roomId) room.start(device.roomId);

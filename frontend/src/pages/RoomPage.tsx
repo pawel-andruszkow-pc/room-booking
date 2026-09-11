@@ -24,8 +24,7 @@ import { formatCountdown, formatDuration, formatTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 
 /** Every state headline is one short word, so they all share a size. */
-const headlineClass =
-  'text-[clamp(8rem,13.5vw,15rem)] font-extrabold leading-[0.9] tracking-tight';
+const headlineClass = 'text-[clamp(8rem,13.5vw,15rem)] font-extrabold leading-[0.9] tracking-tight';
 
 /**
  * Free and busy share one layout (see design): the state word on the left, a
@@ -40,9 +39,12 @@ const splitRightClass =
 const panelLabelClass =
   'flex items-center gap-3 text-[clamp(1.5rem,2.1vw,2.375rem)] font-medium text-white/80';
 
-/** Check-in answers: icon beside the label, sized to fit the right column. */
+/**
+ * Check-in answers: the one question a busy room asks, so they are the
+ * biggest controls on the screen — full width of the right column, stacked.
+ */
 const checkInButtonClass =
-  'h-[clamp(3.25rem,4.5vw,5rem)] gap-[clamp(0.5rem,0.8vw,1rem)] px-[clamp(0.875rem,1.4vw,2rem)] text-[clamp(1rem,1.3vw,1.5rem)]';
+  'w-full h-[clamp(3.75rem,5.25vw,5.75rem)] gap-[clamp(0.625rem,0.9vw,1rem)] px-[clamp(1rem,1.6vw,2rem)] text-[clamp(1.25rem,1.7vw,1.875rem)]';
 
 /** Two buttons side by side must share the left column at any width. */
 const pairClass = 'flex w-full gap-[clamp(0.75rem,1.2vw,1.25rem)]';
@@ -140,8 +142,7 @@ export const RoomPage = observer(function RoomPage() {
 
   const status = room.status;
   const tz = room.timezone;
-  const bg =
-    !status ? 'bg-ink' : state === 'free' ? 'bg-free' : 'bg-busy';
+  const bg = !status ? 'bg-ink' : state === 'free' ? 'bg-free' : 'bg-busy';
   // A tap on this tablet switches the screen instantly; only changes that
   // arrive from the clock or the calendar get the free/busy animation.
   const instant = room.changedByUser;
@@ -154,7 +155,12 @@ export const RoomPage = observer(function RoomPage() {
   };
 
   return (
-    <div className={cn('relative h-full overflow-hidden transition-colors duration-[900ms] ease-in-out', bg)}>
+    <div
+      className={cn(
+        'relative h-full overflow-hidden transition-colors duration-[900ms] ease-in-out',
+        bg,
+      )}
+    >
       {/* Depth without repaint cost: static radial gradient overlay. */}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_90%_at_10%_0%,rgba(255,255,255,0.18),transparent_55%),radial-gradient(90%_80%_at_100%_100%,rgba(0,0,0,0.22),transparent_60%)]" />
 
@@ -206,11 +212,7 @@ export const RoomPage = observer(function RoomPage() {
           )}
           <AnimatePresence mode="wait" initial={false} custom={instant}>
             {!status ? null : state === 'free' ? (
-              <motion.div
-                key="free"
-                {...stateMotion(instant)}
-                className={splitClass}
-              >
+              <motion.div key="free" {...stateMotion(instant)} className={splitClass}>
                 <div className={splitLeftClass}>
                   <motion.h1 {...headlineMotion(instant)} className={headlineClass}>
                     Free
@@ -248,24 +250,20 @@ export const RoomPage = observer(function RoomPage() {
                 )}
               </motion.div>
             ) : state === 'awaiting-check-in' && room.current ? (
-              <motion.div
-                key="check"
-                {...stateMotion(instant)}
-                className={splitClass}
-              >
+              <motion.div key="check" {...stateMotion(instant)} className={splitClass}>
                 <div className={splitLeftClass}>
                   <motion.h1 {...headlineMotion(instant)} className={headlineClass}>
                     Busy
                   </motion.h1>
                 </div>
                 <div className={splitRightClass}>
-                  <p className="text-[clamp(1.5rem,2.4vw,2.875rem)] font-bold leading-tight">
+                  <p className="text-[clamp(1.75rem,2.9vw,3.375rem)] font-bold leading-tight">
                     Is this meeting taking place?
                   </p>
                   <p className="mt-[clamp(0.5rem,0.8vw,1rem)] text-[clamp(1rem,1.5vw,1.625rem)] text-white/80">
                     Room will be freed up in <CountdownLabel />
                   </p>
-                  <div className="mt-[clamp(1rem,1.6vw,2rem)] flex flex-wrap gap-[clamp(0.625rem,1vw,1.25rem)]">
+                  <div className="mt-[clamp(1rem,1.6vw,2rem)] flex flex-col gap-[clamp(0.625rem,1vw,1.25rem)]">
                     <Button
                       variant="primary"
                       className={checkInButtonClass}
@@ -288,11 +286,7 @@ export const RoomPage = observer(function RoomPage() {
                 </div>
               </motion.div>
             ) : room.current ? (
-              <motion.div
-                key="busy"
-                {...stateMotion(instant)}
-                className={splitClass}
-              >
+              <motion.div key="busy" {...stateMotion(instant)} className={splitClass}>
                 <div className={splitLeftClass}>
                   <motion.h1 {...headlineMotion(instant)} className={headlineClass}>
                     Busy
@@ -457,14 +451,25 @@ function FreeRoomButton({
 }) {
   if (!confirming) {
     return (
-      <Button size="xl" variant="secondary" disabled={disabled} onClick={() => onConfirmingChange(true)}>
+      <Button
+        size="xl"
+        variant="primary"
+        disabled={disabled}
+        onClick={() => onConfirmingChange(true)}
+      >
         Free up the room
       </Button>
     );
   }
   return (
     <div className={pairClass}>
-      <Button size="xl" variant="primary" className={pairButtonClass} disabled={disabled} onClick={onConfirm}>
+      <Button
+        size="xl"
+        variant="primary"
+        className={pairButtonClass}
+        disabled={disabled}
+        onClick={onConfirm}
+      >
         <Check className="h-[1.2em] w-[1.2em] shrink-0" />
         <span className="truncate">Yes, free it</span>
       </Button>

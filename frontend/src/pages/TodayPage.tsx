@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useStores } from '@/stores/StoreContext';
+import { useIdleReturn } from '@/hooks/useIdleReturn';
 import { api } from '@/lib/api';
 import { PageShell } from '@/components/PageShell';
 import { Spinner } from '@/components/ui/spinner';
@@ -24,6 +25,7 @@ const COMPACT_PX = 56;
 export const TodayPage = observer(function TodayPage() {
   const { device, room, clock, toast } = useStores();
   const [day, setDay] = useState<RoomDay | null>(null);
+  useIdleReturn();
 
   useEffect(() => {
     if (!device.roomId) return;
