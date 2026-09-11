@@ -48,7 +48,7 @@ export interface RoomStatus {
     checkInEnabled: boolean;
     checkInMinutes: number;
     pollIntervalSeconds: number;
-    maxBookingMinutes: number;
+    maxBookingMinutes: number | null;
     timezone: string;
   };
 }

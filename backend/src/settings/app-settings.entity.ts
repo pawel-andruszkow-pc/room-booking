@@ -30,9 +30,9 @@ export class AppSettings {
   @Column({ type: 'int', default: 20 })
   pollIntervalSeconds: number;
 
-  /** Longest ad-hoc booking a tablet may create, in minutes. */
-  @Column({ type: 'int', default: 240 })
-  maxBookingMinutes: number;
+  /** Longest ad-hoc booking a tablet may create, in minutes; null = no limit. */
+  @Column({ type: 'int', nullable: true, default: null })
+  maxBookingMinutes: number | null;
 
   @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;

@@ -45,13 +45,7 @@ export class RoomStore {
   constructor(private readonly clock: ClockStore) {
     makeAutoObservable<
       this,
-      | 'pollTimer'
-      | 'abort'
-      | 'streamAbort'
-      | 'disposers'
-      | 'clock'
-      | 'version'
-      | 'ownBookings'
+      'pollTimer' | 'abort' | 'streamAbort' | 'disposers' | 'clock' | 'version' | 'ownBookings'
     >(
       this,
       {
@@ -137,7 +131,7 @@ export class RoomStore {
     if (!this.status || this.status.current) return 0;
     if (!this.status.freeUntil) return this.status.availableMinutes;
     const live = minutesBetween(this.clock.now, this.status.freeUntil);
-    return Math.max(0, Math.min(this.status.settings.maxBookingMinutes, live));
+    return Math.max(0, Math.min(this.status.settings.maxBookingMinutes ?? Infinity, live));
   }
 
   /** The next moment the status is guaranteed to change. */
@@ -146,7 +140,8 @@ export class RoomStore {
     const candidates: number[] = [];
     if (this.status.current) candidates.push(new Date(this.status.current.end).getTime());
     if (this.status.next) candidates.push(new Date(this.status.next.start).getTime());
-    if (this.status.checkIn?.pending) candidates.push(new Date(this.status.checkIn.deadline).getTime());
+    if (this.status.checkIn?.pending)
+      candidates.push(new Date(this.status.checkIn.deadline).getTime());
     return candidates.length ? Math.min(...candidates) : null;
   }
 
@@ -414,9 +409,7 @@ function predictBooked(
     current: event,
     // Walk-ins are capped at the gap before the next meeting, so no chaining.
     busyUntil: end,
-    checkIn: s.settings.checkInEnabled
-      ? { pending: false, confirmed: true, deadline: end }
-      : null,
+    checkIn: s.settings.checkInEnabled ? { pending: false, confirmed: true, deadline: end } : null,
     freeUntil: null,
     availableMinutes: 0,
     events: [event, ...s.events],
@@ -427,9 +420,14 @@ function predictFreed(s: RoomStatus, now: Date): RoomStatus {
   const currentId = s.current?.id;
   const events = s.events.filter((e) => e.id !== currentId);
   const next = s.next ?? events.find((e) => new Date(e.start) > now) ?? null;
+  // Without a next meeting the server bounds this by the end of the day; the
+  // guess is generous and its refresh replaces it within a second.
   const availableMinutes = next
-    ? Math.max(0, Math.min(s.settings.maxBookingMinutes, minutesBetween(now, next.start)))
-    : s.settings.maxBookingMinutes;
+    ? Math.max(
+        0,
+        Math.min(s.settings.maxBookingMinutes ?? Infinity, minutesBetween(now, next.start)),
+      )
+    : (s.settings.maxBookingMinutes ?? 24 * 60);
   return {
     ...s,
     now: now.toISOString(),

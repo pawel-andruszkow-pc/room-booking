@@ -19,7 +19,7 @@ export class BookRoomDto {
 
   @IsInt()
   @Min(5)
-  @Max(720)
+  @Max(1440)
   durationMinutes: number;
 
   @IsOptional()

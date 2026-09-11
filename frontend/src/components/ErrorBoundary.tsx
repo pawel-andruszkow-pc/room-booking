@@ -56,10 +56,8 @@ export class ErrorBoundary extends Component<Props, State> {
   private retry = () => this.setState({ error: null });
 
   render() {
-    if (this.state.error) {
-      const error = this.state.error ?? new Error('Sample error, shown for previewing this page');
-      return <ErrorPage error={error} onRetry={this.retry} />;
-    }
+    const { error } = this.state;
+    if (error) return <ErrorPage error={error} onRetry={this.retry} />;
     return this.props.children;
   }
 }

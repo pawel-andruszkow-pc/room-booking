@@ -15,7 +15,8 @@ export interface PublicSettings {
   checkInMinutes: number;
   timezone: string;
   pollIntervalSeconds: number;
-  maxBookingMinutes: number;
+  /** Null means a walk-in may take the room until the next meeting. */
+  maxBookingMinutes: number | null;
   calendarProvider: CalendarProviderName;
   /** Service-account e-mail the admin must share room calendars with. */
   googleServiceAccountEmail: string | null;

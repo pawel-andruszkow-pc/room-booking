@@ -81,7 +81,10 @@ export class BookingsService {
       ? 0
       : Math.max(
           0,
-          Math.min(settings.maxBookingMinutes, differenceInMinutes(freeUntil!, now)),
+          Math.min(
+            settings.maxBookingMinutes ?? Infinity,
+            differenceInMinutes(freeUntil!, now),
+          ),
         );
 
     const state: RoomStatus['state'] = !current

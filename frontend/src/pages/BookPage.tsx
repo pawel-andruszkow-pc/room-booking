@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import { observer } from 'mobx-react-lite';
 import { useNavigate } from 'react-router-dom';
 import * as Slider from '@radix-ui/react-slider';
@@ -299,14 +300,15 @@ function TimePicker({
   dayEnd: number;
   nowMs: number;
   events: CalendarEvent[];
-  maxMinutes: number;
+  /** Null: only the next meeting and the end of the day bound a booking. */
+  maxMinutes: number | null;
   tz: string;
   busy: boolean;
   modeSwitch: ReactNode;
   onBook: (booking: Booking) => void;
 }) {
   const total = Math.max(1, Math.floor((dayEnd - dayStart) / UNIT_MS));
-  const maxUnits = Math.max(1, Math.floor(maxMinutes / UNIT_MINUTES));
+  const maxUnits = maxMinutes === null ? total : Math.max(1, Math.floor(maxMinutes / UNIT_MINUTES));
   /** The next unit that can still be booked; everything before it is over. */
   const nowUnit = Math.min(total, Math.max(0, Math.ceil((nowMs - dayStart) / UNIT_MS)));
 
@@ -374,10 +376,19 @@ function TimePicker({
     setRange([from, end]);
   };
 
-  /** Radix hands back both values; work out which pin the user moved. */
+  /**
+   * Radix hands back both values; work out which pin the user moved.
+   *
+   * Committed synchronously: React files pointer moves as low-priority
+   * "continuous" input and may leave the re-render for a later frame, which
+   * on a tablet shows as the pin trailing the finger. The tree under here is
+   * small, so flushing it inside the event is cheaper than the lag.
+   */
   const onSlide = ([nextFrom, nextTo]: number[]) => {
-    if (nextFrom !== from) setFrom(nextFrom);
-    else setTo(nextTo);
+    flushSync(() => {
+      if (nextFrom !== from) setFrom(nextFrom);
+      else setTo(nextTo);
+    });
   };
 
   /**
@@ -412,9 +423,9 @@ function TimePicker({
           minusDisabled={busy || from <= nowUnit || !isFree(from - 1)}
           plusDisabled={busy || from + 1 >= to || !isFree(from + 1)}
         />
-        <div className="pb-6 text-center">
+        <div className="w-60 shrink-0 pb-6 text-center">
           <div className="text-lg uppercase tracking-[0.2em] text-white/50">Duration</div>
-          <div className="tabular mt-1 text-4xl font-extrabold text-emerald-400">
+          <div className="tabular mt-1 whitespace-nowrap text-4xl font-extrabold text-emerald-400">
             {formatDuration(minutes)}
           </div>
         </div>
@@ -451,16 +462,7 @@ function TimePicker({
             onValueChange={onSlide}
           >
             <Slider.Track className="relative h-6 grow overflow-hidden rounded-full bg-white/10">
-              {blocked.map(([f, t]) => (
-                <span
-                  key={`${f}-${t}`}
-                  className="absolute inset-y-0 bg-white/25"
-                  style={{
-                    left: `${pct(f, windowStart, windowEnd)}%`,
-                    width: `${pct(t, windowStart, windowEnd) - pct(f, windowStart, windowEnd)}%`,
-                  }}
-                />
-              ))}
+              <BlockedSpans blocked={blocked} from={windowStart} to={windowEnd} />
               <Slider.Range className="absolute h-full bg-emerald-400" />
             </Slider.Track>
             <Slider.Thumb
@@ -551,8 +553,27 @@ function Pin({
   );
 }
 
+/** Taken parts of the track. Only the window moves these, never a drag. */
+const BlockedSpans = memo(function BlockedSpans({
+  blocked,
+  from,
+  to,
+}: {
+  blocked: Array<[number, number]>;
+  from: number;
+  to: number;
+}) {
+  return blocked.map(([f, t]) => (
+    <span
+      key={`${f}-${t}`}
+      className="absolute inset-y-0 bg-white/25"
+      style={{ left: `${pct(f, from, to)}%`, width: `${pct(t, from, to) - pct(f, from, to)}%` }}
+    />
+  ));
+});
+
 /** Half hours under the visible part of the track; whole hours stand out. */
-function HourTicks({
+const HourTicks = memo(function HourTicks({
   dayStart,
   from,
   to,
@@ -592,7 +613,7 @@ function HourTicks({
       ))}
     </div>
   );
-}
+});
 
 /** Where a unit sits on the visible window, in percent. */
 function pct(unit: number, from: number, to: number): number {

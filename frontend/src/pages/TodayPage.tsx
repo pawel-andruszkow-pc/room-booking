@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useStores } from '@/stores/StoreContext';
 import { useIdleReturn } from '@/hooks/useIdleReturn';
-import { api } from '@/lib/api';
 import { PageShell } from '@/components/PageShell';
 import { Spinner } from '@/components/ui/spinner';
 import { formatDate, formatRange, formatTime } from '@/lib/time';
@@ -23,22 +22,16 @@ const COMPACT_PX = 56;
 
 /** Read-only overview of the room's whole day, drawn to a vertical time scale. */
 export const TodayPage = observer(function TodayPage() {
-  const { device, room, clock, toast } = useStores();
-  const [day, setDay] = useState<RoomDay | null>(null);
+  const { day: store, room, clock } = useStores();
   useIdleReturn();
 
+  // Opens on the cached day straight away; the fetch behind it brings any
+  // change since the last poll.
   useEffect(() => {
-    if (!device.roomId) return;
-    const controller = new AbortController();
-    api.rooms
-      .today(device.roomId, controller.signal)
-      .then(setDay)
-      .catch((err: Error) => {
-        if (err.name !== 'AbortError') toast.error('Could not load today', err.message);
-      });
-    return () => controller.abort();
-  }, [device.roomId, toast]);
+    void store.refresh();
+  }, [store]);
 
+  const day = store.day;
   const tz = day?.timezone ?? room.timezone;
   const now = clock.now;
 
@@ -49,9 +42,13 @@ export const TodayPage = observer(function TodayPage() {
       timezone={tz}
     >
       {!day ? (
-        <div className="flex justify-center py-20">
-          <Spinner className="h-10 w-10" />
-        </div>
+        store.error ? (
+          <p className="text-3xl text-white/60">Could not load today: {store.error}</p>
+        ) : (
+          <div className="flex justify-center py-20">
+            <Spinner className="h-10 w-10" />
+          </div>
+        )
       ) : day.events.length === 0 ? (
         <p className="text-3xl text-white/60">No meetings today. The room is free all day.</p>
       ) : (

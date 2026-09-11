@@ -41,9 +41,10 @@ export class UpdateSettingsDto {
   @Max(300)
   pollIntervalSeconds?: number;
 
+  /** Null clears the limit. */
   @IsOptional()
   @IsInt()
   @Min(15)
-  @Max(720)
-  maxBookingMinutes?: number;
+  @Max(1440)
+  maxBookingMinutes?: number | null;
 }

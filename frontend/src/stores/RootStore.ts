@@ -1,8 +1,9 @@
-import { makeAutoObservable, runInAction } from 'mobx';
+import { makeAutoObservable, reaction, runInAction } from 'mobx';
 import { configureHttp } from '@/lib/http';
 import { AdminStore } from './AdminStore';
 import { AuthStore } from './AuthStore';
 import { ClockStore } from './ClockStore';
+import { DayStore } from './DayStore';
 import { DeviceStore } from './DeviceStore';
 import { RoomStore } from './RoomStore';
 import { ToastStore } from './ToastStore';
@@ -22,6 +23,7 @@ export class RootStore {
   readonly auth = new AuthStore();
   readonly device = new DeviceStore();
   readonly room = new RoomStore(this.clock);
+  readonly day = new DayStore();
   readonly admin = new AdminStore();
   readonly toast = new ToastStore();
   readonly update = new UpdateStore();
@@ -42,6 +44,7 @@ export class RootStore {
         auth: false,
         device: false,
         room: false,
+        day: false,
         admin: false,
         toast: false,
         update: false,
@@ -67,6 +70,30 @@ export class RootStore {
     this.clock.start();
     // Tablets run unattended, so a deploy has to reach them on its own.
     this.update.start();
+
+    // Today's meetings are cached for the assigned room from the moment it is
+    // known, so the Today page never opens on a spinner.
+    reaction(
+      () => this.device.roomId,
+      (roomId) => (roomId ? this.day.start(roomId) : this.day.stop()),
+      { fireImmediately: true },
+    );
+    // The room screen learns of changes first (stream, own bookings): pull the
+    // day view along with it.
+    reaction(
+      () => {
+        const s = this.room.status;
+        return [s?.current?.id, s?.current?.end, s?.next?.id, s?.next?.start].join('|');
+      },
+      () => void this.day.refresh(),
+    );
+    // Turn the page at midnight.
+    reaction(
+      () => this.day.isStale(this.clock.now),
+      (stale) => {
+        if (stale) void this.day.refresh();
+      },
+    );
   }
 
   /**

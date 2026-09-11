@@ -42,7 +42,8 @@ export interface PublicSettings {
   checkInMinutes: number;
   timezone: string;
   pollIntervalSeconds: number;
-  maxBookingMinutes: number;
+  /** Null: no limit beyond the next meeting. */
+  maxBookingMinutes: number | null;
   calendarProvider: CalendarSource;
   googleServiceAccountEmail: string | null;
 }
@@ -71,7 +72,7 @@ export interface RoomStatus {
     checkInEnabled: boolean;
     checkInMinutes: number;
     pollIntervalSeconds: number;
-    maxBookingMinutes: number;
+    maxBookingMinutes: number | null;
     timezone: string;
   };
 }
