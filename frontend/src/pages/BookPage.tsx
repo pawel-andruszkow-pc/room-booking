@@ -215,7 +215,10 @@ const QuickBooking = observer(function QuickBooking({
         : fallback;
 
   return (
-    <div className="flex flex-col gap-10">
+    // Sizes and spacing scale with the viewport rather than being fixed: the
+    // tiles sit lower on a tall tablet without the short windows this is
+    // developed in gaining a scrollbar.
+    <div className="flex flex-col gap-[clamp(2rem,7vh,4.5rem)] pt-[clamp(0.5rem,6vh,4.5rem)]">
       <div className="grid grid-cols-3 gap-6">
         {QUICK_MINUTES.map((m) => {
           const slotFits = fits(m);
@@ -227,7 +230,7 @@ const QuickBooking = observer(function QuickBooking({
               onClick={() => setPicked(m)}
               className={cn(
                 chipClass,
-                'flex h-40 flex-col items-center justify-center gap-2 text-4xl',
+                'flex h-[clamp(6.5rem,17vh,10rem)] flex-col items-center justify-center gap-2 text-4xl',
                 // Unavailable slots keep enough contrast to read the reason;
                 // dimming them to nothing would hide the label with them.
                 minutes === m ? chipOn : slotFits ? chipOff : 'bg-white/5 text-white/40',
