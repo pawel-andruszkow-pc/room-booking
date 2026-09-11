@@ -35,7 +35,13 @@ export function PageShell({
   return (
     <div className="flex h-full flex-col bg-ink">
       <header className="flex shrink-0 items-center gap-6 border-b border-white/10 px-12 py-6">
-        <Button variant="secondary" size="icon" className="h-16 w-16 rounded-2xl" onClick={() => navigate(backTo)} aria-label="Back">
+        <Button
+          variant="secondary"
+          size="icon"
+          className="h-16 w-16 rounded-2xl"
+          onClick={() => navigate(backTo)}
+          aria-label="Back"
+        >
           <ArrowLeft className="h-8 w-8" />
         </Button>
         <div className="min-w-0 flex-1">
@@ -43,10 +49,17 @@ export function PageShell({
           {subtitle && <p className="mt-1 truncate text-lg text-white/60">{subtitle}</p>}
         </div>
         {actions && <div className="flex shrink-0 items-center gap-3">{actions}</div>}
-        <Clock timezone={timezone} size="sm" showDate={false} className="ml-4 shrink-0 text-white/80" />
+        <Clock
+          timezone={timezone}
+          size="sm"
+          showDate={false}
+          className="ml-4 shrink-0 text-white/80"
+        />
       </header>
       <main className={cn('scroll-thin min-h-0 flex-1 overflow-y-auto px-12 py-10', className)}>
-        <div className="mx-auto w-full max-w-[1500px]">{children}</div>
+        {/* A flex column so a page can claim the leftover height with flex-1
+            and distribute it; pages that do not stay their natural height. */}
+        <div className="mx-auto flex min-h-full w-full max-w-[1500px] flex-col">{children}</div>
       </main>
     </div>
   );
