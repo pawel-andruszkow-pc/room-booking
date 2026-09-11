@@ -2,7 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { observer } from 'mobx-react-lite';
 import { useNavigate } from 'react-router-dom';
-import { AnimatePresence, motion } from 'motion/react';
+import { motion } from 'motion/react';
 import * as Slider from '@radix-ui/react-slider';
 import { Check, ChevronLeft, ChevronRight, Clock3, Minus, Plus, Zap } from 'lucide-react';
 import { useStores } from '@/stores/StoreContext';
@@ -191,34 +191,31 @@ export const BookPage = observer(function BookPage() {
         </div>
       ) : (
         <div className="flex flex-1 flex-col">
-          {/* Only the view fades — opacity alone, compositor work, no layout —
-              and the outgoing one is gone before the incoming one mounts, so
-              the two are never drawn together. The action row below is not
-              part of it: it stays put and only its labels change. */}
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div
-              key={mode}
-              className="flex flex-1 flex-col"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1, transition: { duration: 0.15, ease: 'easeOut' } }}
-              exit={{ opacity: 0, transition: { duration: 0.1, ease: 'easeIn' } }}
-            >
-              {mode === 'quick' ? (
-                <QuickBooking available={available} busy={busy} onProposal={setProposal} />
-              ) : (
-                <TimePicker
-                  dayStart={day.start}
-                  dayEnd={day.end}
-                  nowMs={clock.now.getTime()}
-                  events={status.events}
-                  maxMinutes={status.settings.maxBookingMinutes}
-                  tz={tz}
-                  busy={busy}
-                  onProposal={setProposal}
-                />
-              )}
-            </motion.div>
-          </AnimatePresence>
+          {/* Same timing as a route change (see PageTransition): the old view
+              is dropped on the tap and the new one fades in, compositor-only.
+              The action row below is not part of it: it stays put and only
+              its labels change. */}
+          <motion.div
+            key={mode}
+            className="flex flex-1 flex-col"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1, transition: { duration: 0.15, ease: 'easeOut' } }}
+          >
+            {mode === 'quick' ? (
+              <QuickBooking available={available} busy={busy} onProposal={setProposal} />
+            ) : (
+              <TimePicker
+                dayStart={day.start}
+                dayEnd={day.end}
+                nowMs={clock.now.getTime()}
+                events={status.events}
+                maxMinutes={status.settings.maxBookingMinutes}
+                tz={tz}
+                busy={busy}
+                onProposal={setProposal}
+              />
+            )}
+          </motion.div>
           {actions}
         </div>
       )}
