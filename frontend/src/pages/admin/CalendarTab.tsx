@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
+import { Switch } from '@/components/ui/switch';
 import type { CalendarSummary } from '@/types';
 
 /** Google connection status + one-tap import of Workspace room resources. */
@@ -239,15 +240,27 @@ const LocalEventForm = observer(function LocalEventForm() {
   const [title, setTitle] = useState('Demo meeting');
   const [startsIn, setStartsIn] = useState('0');
   const [duration, setDuration] = useState('30');
+  const [allDay, setAllDay] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const create = async () => {
     if (!calendarId) return;
     setBusy(true);
     try {
-      const start = new Date(Date.now() + Number(startsIn) * 60000);
-      const end = new Date(start.getTime() + Number(duration) * 60000);
-      await admin.createLocalEvent({ calendarId, title, start: start.toISOString(), end: end.toISOString() });
+      // An all-day event spans this browser's calendar day; close enough for a demo.
+      const start = allDay
+        ? new Date(new Date().setHours(0, 0, 0, 0))
+        : new Date(Date.now() + Number(startsIn) * 60000);
+      const end = allDay
+        ? new Date(start.getTime() + 24 * 60 * 60000)
+        : new Date(start.getTime() + Number(duration) * 60000);
+      await admin.createLocalEvent({
+        calendarId,
+        title,
+        start: start.toISOString(),
+        end: end.toISOString(),
+        isAllDay: allDay,
+      });
       toast.success('Demo meeting created');
     } catch (err) {
       toast.error('Could not create event', (err as Error).message);
@@ -282,13 +295,17 @@ const LocalEventForm = observer(function LocalEventForm() {
         </div>
         <div>
           <Label htmlFor="ev-start">Starts in (min)</Label>
-          <Input id="ev-start" type="number" inputMode="numeric" value={startsIn} onChange={(e) => setStartsIn(e.target.value)} />
+          <Input id="ev-start" type="number" inputMode="numeric" value={startsIn} disabled={allDay} onChange={(e) => setStartsIn(e.target.value)} />
         </div>
         <div>
           <Label htmlFor="ev-duration">Duration (min)</Label>
-          <Input id="ev-duration" type="number" inputMode="numeric" min={5} value={duration} onChange={(e) => setDuration(e.target.value)} />
+          <Input id="ev-duration" type="number" inputMode="numeric" min={5} value={duration} disabled={allDay} onChange={(e) => setDuration(e.target.value)} />
         </div>
-        <div className="col-span-2 flex items-end">
+        <div className="flex items-end gap-3 pb-2">
+          <Switch id="ev-all-day" checked={allDay} onCheckedChange={setAllDay} />
+          <Label htmlFor="ev-all-day">All day</Label>
+        </div>
+        <div className="flex items-end">
           <Button variant="accent" className="w-full" disabled={busy || !calendarId} onClick={create}>
             {busy ? <Spinner className="h-5 w-5" /> : <Plus className="h-5 w-5" />} Create
           </Button>

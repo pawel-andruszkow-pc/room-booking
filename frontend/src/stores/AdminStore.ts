@@ -202,7 +202,13 @@ export class AdminStore {
     }
   }
 
-  async createLocalEvent(body: { calendarId: string; title: string; start: string; end: string }) {
+  async createLocalEvent(body: {
+    calendarId: string;
+    title: string;
+    start: string;
+    end: string;
+    isAllDay?: boolean;
+  }) {
     return api.calendar.createLocalEvent(body);
   }
 }

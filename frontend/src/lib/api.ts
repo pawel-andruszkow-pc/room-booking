@@ -45,8 +45,7 @@ export const api = {
       id: string,
       opts: { signal: AbortSignal; onMessage: (s: RoomStatus) => void; onError?: () => void },
     ) => streamEvents<RoomStatus>(`/rooms/${id}/stream`, opts),
-    today: (id: string, signal?: AbortSignal) =>
-      request<RoomDay>(`/rooms/${id}/today`, { signal }),
+    today: (id: string, signal?: AbortSignal) => request<RoomDay>(`/rooms/${id}/today`, { signal }),
     book: (id: string, durationMinutes: number, title?: string) =>
       request<RoomStatus>(`/rooms/${id}/book`, {
         method: 'POST',
@@ -64,6 +63,11 @@ export const api = {
       request<RoomStatus>(`/rooms/${id}/check-in`, { method: 'POST', body: { eventId } }),
     release: (id: string, eventId: string) =>
       request<RoomStatus>(`/rooms/${id}/release`, { method: 'POST', body: { eventId } }),
+    /** Settings PIN: deletes any of today's meetings; returns the day without it. */
+    removeEvent: (id: string, eventId: string) =>
+      request<RoomDay>(`/rooms/${id}/events/${encodeURIComponent(eventId)}`, {
+        method: 'DELETE',
+      }),
   },
 
   devices: {
@@ -83,7 +87,12 @@ export const api = {
       request<CalendarSummary>('/calendar/calendars', { method: 'POST', body: { calendarId } }),
     test: (calendarId: string) =>
       request<ConnectionTestResult>('/calendar/test', { method: 'POST', body: { calendarId } }),
-    createLocalEvent: (body: { calendarId: string; title: string; start: string; end: string }) =>
-      request<CalendarEvent>('/calendar/local/events', { method: 'POST', body }),
+    createLocalEvent: (body: {
+      calendarId: string;
+      title: string;
+      start: string;
+      end: string;
+      isAllDay?: boolean;
+    }) => request<CalendarEvent>('/calendar/local/events', { method: 'POST', body }),
   },
 };

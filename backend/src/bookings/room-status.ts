@@ -13,6 +13,8 @@ export interface RoomDay {
   timezone: string;
   /** All timed events today, past ones included, sorted by start. */
   events: CalendarEvent[];
+  /** Full-day reservations, clamped to this day. The room is busy all day when non-empty. */
+  allDay: CalendarEvent[];
 }
 
 export interface CheckInStatus {
@@ -29,6 +31,11 @@ export interface RoomStatus {
   /** Server time — the tablet syncs its clock offset from this. */
   now: string;
   state: RoomState;
+  /**
+   * The meeting the room is busy with. A full-day event (`isAllDay` — an
+   * all-day entry or a timed one covering the whole day) is a reservation of
+   * the day: it is never asked about and cannot be ended from the tablet.
+   */
   current: CalendarEvent | null;
   next: CalendarEvent | null;
   /**
@@ -42,7 +49,7 @@ export interface RoomStatus {
   freeUntil: string | null;
   /** Longest ad-hoc booking that fits right now (0 while busy). */
   availableMinutes: number;
-  /** Remaining timed events today, including the current one. */
+  /** Remaining events today, including the current one; a full-day reservation comes first. */
   events: CalendarEvent[];
   settings: {
     checkInEnabled: boolean;

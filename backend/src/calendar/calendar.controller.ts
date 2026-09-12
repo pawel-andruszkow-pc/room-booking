@@ -90,6 +90,7 @@ export class CalendarController {
       description: dto.description?.trim() || null,
       start,
       end,
+      isAllDay: dto.isAllDay ?? false,
     });
   }
 }

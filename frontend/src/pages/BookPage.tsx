@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { observer } from 'mobx-react-lite';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'motion/react';
 import * as Slider from '@radix-ui/react-slider';
 import { Check, ChevronLeft, ChevronRight, Clock3, Minus, Plus, Zap } from 'lucide-react';
@@ -38,6 +38,11 @@ const chipOff = 'bg-white/10 hover:bg-white/15';
 const chipClass =
   'rounded-2xl font-bold transition-[background-color,color] duration-150 disabled:cursor-not-allowed disabled:opacity-25';
 
+/** The slider handles; the ring turns to the warning colour when the pin sits in a meeting. */
+const thumbClass = 'block h-14 w-14 rounded-full bg-white shadow-lg ring-4 focus:outline-none';
+const thumbOk = 'ring-emerald-400/30';
+const thumbWarn = 'ring-attention/50';
+
 /** The −5 / +5 nudges beside a pin, and the arrows either side of the track. */
 const nudgeClass =
   'flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-white/10 transition-[transform,background-color] duration-150 hover:bg-white/15 active:scale-90 disabled:cursor-not-allowed disabled:opacity-20';
@@ -71,11 +76,17 @@ type Proposal = { label: string; book: (() => Booking) | null };
  * A booking that starts now is sent as a walk-in (checked in on the spot); one
  * that starts later is a reservation, and goes through the usual presence
  * prompt when it begins.
+ *
+ * Opened with `?when=later` — from a busy room — the page starts on the time
+ * picker, which is the only view that makes sense while a meeting is running.
  */
 export const BookPage = observer(function BookPage() {
   const { clock, device, room, toast } = useStores();
   const navigate = useNavigate();
-  const [mode, setMode] = useState<Mode>('quick');
+  const [searchParams] = useSearchParams();
+  const [mode, setMode] = useState<Mode>(() =>
+    searchParams.get('when') === 'later' ? 'time' : 'quick',
+  );
   const [busy, setBusy] = useState(false);
   const [proposal, setProposal] = useState<Proposal | null>(null);
   /** Set the moment the user confirms; freezes the page while it fades out. */
@@ -94,17 +105,19 @@ export const BookPage = observer(function BookPage() {
   const tz = room.timezone;
   const available = room.availableMinutes;
 
-  // If someone else took the room while this page was open, go back — once.
+  // Quick booking is "from now": if someone else took the room while it was
+  // open, go back — once. The time picker draws the running meeting as taken
+  // and offers the gaps after it, so a busy room is no reason to leave it.
   // Our own booking (optimistic or confirmed) never counts as "taken".
   useEffect(() => {
-    if (!status || status.state === 'free') return;
+    if (!status || status.state === 'free' || mode !== 'quick') return;
     if (submitted.current || redirected.current) return;
     if (room.busy || room.optimistic) return;
     if (status.current && room.isOwnBooking(status.current.id)) return;
     redirected.current = true;
     toast.info('Room is no longer free');
     navigate('/', { replace: true });
-  }, [status, room, navigate, toast]);
+  }, [status, mode, room, navigate, toast]);
 
   const day = useMemo(() => (status ? dayBounds(new Date(status.now), tz) : null), [status, tz]);
 
@@ -136,25 +149,34 @@ export const BookPage = observer(function BookPage() {
       });
   };
 
+  // Nothing to book "now" while a meeting is running, so the way over to the
+  // quick view is not offered then.
+  const canBookNow = status?.state === 'free';
+  /** On the time picker of a busy room: when the first gap can open. */
+  const busyHint =
+    !canBookNow && room.busyUntil ? `Busy until ${formatTime(room.busyUntil, tz)} · ` : '';
+
   const actions = (
     <div className={actionsClass}>
-      <Button
-        variant="secondary"
-        size="xl"
-        className="min-w-0 flex-1 basis-0"
-        disabled={busy}
-        onClick={() => setMode(mode === 'quick' ? 'time' : 'quick')}
-      >
-        {mode === 'quick' ? (
-          <>
-            <Clock3 className="h-8 w-8" /> Pick a time
-          </>
-        ) : (
-          <>
-            <Zap className="h-8 w-8" /> Quick booking
-          </>
-        )}
-      </Button>
+      {canBookNow && (
+        <Button
+          variant="secondary"
+          size="xl"
+          className="min-w-0 flex-1 basis-0"
+          disabled={busy}
+          onClick={() => setMode(mode === 'quick' ? 'time' : 'quick')}
+        >
+          {mode === 'quick' ? (
+            <>
+              <Clock3 className="h-8 w-8" /> Pick a time
+            </>
+          ) : (
+            <>
+              <Zap className="h-8 w-8" /> Quick booking
+            </>
+          )}
+        </Button>
+      )}
       <Button
         size="xl"
         variant="success"
@@ -181,7 +203,7 @@ export const BookPage = observer(function BookPage() {
               ? available >= UNIT_MINUTES
                 ? `Free for ${formatDuration(available)}${status.freeUntil && room.next ? ` · next meeting at ${formatTime(status.freeUntil, tz)}` : ''}`
                 : 'The room is free for less than 5 minutes'
-              : 'Drag the pins, or nudge them 5 minutes at a time'
+              : `${busyHint}Drag the pins, or nudge them 5 minutes at a time`
       }
       timezone={tz}
     >
@@ -299,8 +321,10 @@ const QuickBooking = observer(function QuickBooking({
 /**
  * A from/to range on the day, counted in units from midnight. Both the
  * meetings already in the calendar and the part of the day that is over are
- * drawn as taken, and the pins stop at the edge of the free gap they sit in —
- * so a selection can never cross one or start in the past.
+ * drawn as taken. The pins move freely over the meetings — stopping them at
+ * the edge of a gap made a pin feel stuck for no visible reason — but a
+ * selection that runs into one is shown as a warning and cannot be booked.
+ * Only the past is a hard stop: a start behind the clock simply means "now".
  */
 function TimePicker({
   dayStart,
@@ -327,35 +351,42 @@ function TimePicker({
   /** The next unit that can still be booked; everything before it is over. */
   const nowUnit = Math.min(total, Math.max(0, Math.ceil((nowMs - dayStart) / UNIT_MS)));
 
-  /** Taken: the part of the day that has passed, then every meeting. */
-  const blocked = useMemo(() => {
-    const past: Array<[number, number]> = nowUnit > 0 ? [[0, nowUnit]] : [];
-    return past
-      .concat(
-        events.map((e): [number, number] => [
-          Math.floor((+new Date(e.start) - dayStart) / UNIT_MS),
-          Math.ceil((+new Date(e.end) - dayStart) / UNIT_MS),
-        ]),
-      )
-      .map(([f, t]): [number, number] => [Math.max(0, f), Math.min(total, t)])
-      .filter(([f, t]) => t > f)
-      .sort((a, b) => a[0] - b[0]);
-  }, [events, dayStart, total, nowUnit]);
+  /** Today's meetings as unit spans, in day order. */
+  const meetings = useMemo(
+    () =>
+      events
+        .map((e) => ({
+          from: Math.max(0, Math.floor((+new Date(e.start) - dayStart) / UNIT_MS)),
+          to: Math.min(total, Math.ceil((+new Date(e.end) - dayStart) / UNIT_MS)),
+          title: e.title,
+        }))
+        .filter((m) => m.to > m.from)
+        .sort((a, b) => a.from - b.from),
+    [events, dayStart, total],
+  );
 
-  const isFree = (unit: number) => !blocked.some(([f, t]) => unit >= f && unit < t);
-  /** First unit taken at or after `unit` — how far a selection may run. */
-  const nextBlock = (unit: number) => blocked.find(([f]) => f >= unit)?.[0] ?? total;
+  /** Drawn as taken: the part of the day that has passed, then every meeting. */
+  const blocked = useMemo(() => {
+    const spans = meetings.map((m): [number, number] => [m.from, m.to]);
+    return nowUnit > 0 ? [[0, nowUnit] as [number, number], ...spans] : spans;
+  }, [meetings, nowUnit]);
+
+  const inMeeting = (unit: number) => meetings.some((m) => unit >= m.from && unit < m.to);
+  /** Start of the first meeting at or after `unit`, or the end of the day. */
+  const nextMeeting = (unit: number) => meetings.find((m) => m.from >= unit)?.from ?? total;
 
   const firstFree = useMemo(() => {
     for (let u = nowUnit; u < total; u += 1) {
-      if (!blocked.some(([f, t]) => u >= f && u < t)) return u;
+      if (!meetings.some((m) => u >= m.from && u < m.to)) return u;
     }
     return null;
-  }, [blocked, total, nowUnit]);
+  }, [meetings, total, nowUnit]);
 
+  // The default selection is placed in a gap; only a move made by hand can
+  // run into a meeting.
   const [range, setRange] = useState<[number, number]>(() => {
     const start = firstFree ?? nowUnit;
-    const limit = Math.min(nextBlock(start), start + maxUnits, total);
+    const limit = Math.min(nextMeeting(start), start + maxUnits, total);
     return [start, Math.min(limit, start + DEFAULT_MINUTES / UNIT_MINUTES)];
   });
   const [from, to] = range;
@@ -370,7 +401,7 @@ function TimePicker({
   const windowEnd = Math.min(windowStart + WINDOW_UNITS, total);
 
   /** How far the end pin may go with the current start. */
-  const limit = Math.min(nextBlock(from), from + maxUnits, total);
+  const limit = Math.min(from + maxUnits, total);
 
   // Time passing never invalidates the selection: once the start is at or
   // behind the clock it simply means "now", which is what a walk-in wants.
@@ -380,16 +411,23 @@ function TimePicker({
   const minutes = Math.max(0, Math.round((+endAt - +startAt) / 60_000));
 
   const setFrom = (next: number) => {
-    const clamped = Math.min(Math.max(0, next), total - 1);
-    if (!isFree(clamped)) return;
-    const end = Math.min(to, nextBlock(clamped), clamped + maxUnits, total);
+    const clamped = Math.min(Math.max(nowUnit, next), total - 1);
+    const end = Math.min(to, clamped + maxUnits, total);
     setRange([clamped, Math.max(end, clamped + 1)]);
   };
 
   const setTo = (next: number) => {
-    const end = Math.min(Math.max(next, from + 1), nextBlock(from), from + maxUnits, total);
-    setRange([from, end]);
+    setRange([from, Math.min(Math.max(next, from + 1), from + maxUnits, total)]);
   };
+
+  /**
+   * Meetings the selection runs into. The pin standing inside one is the one
+   * shown as a warning; a selection that swallows a meeting whole flags both.
+   */
+  const clash = meetings.find((m) => m.from < to && m.to > from) ?? null;
+  const fromClash = clash !== null && inMeeting(from);
+  const toClash = clash !== null && inMeeting(to - 1);
+  const bothClash = clash !== null && !fromClash && !toClash;
 
   /**
    * Radix hands back both values; work out which pin the user moved.
@@ -416,19 +454,23 @@ function TimePicker({
     setWindowStart(start);
     const end = Math.min(start + WINDOW_UNITS, total);
     if (from >= start && to <= end) return;
-    let first = Math.max(from, start);
-    while (first < end && !isFree(first)) first += 1;
+    const first = Math.max(from, start, nowUnit);
     if (first >= end) return;
     const length = Math.max(1, to - from);
-    setRange([first, Math.min(first + length, nextBlock(first), first + maxUnits, end)]);
+    setRange([first, Math.min(first + length, first + maxUnits, end)]);
   };
 
   const startMs = startAt.getTime();
   const endMs = endAt.getTime();
   const none = firstFree === null;
+  const clashTitle = clash?.title ?? null;
   useEffect(() => {
     if (none || minutes < UNIT_MINUTES) {
       onProposal({ label: none ? 'No free time' : 'Pick a time', book: null });
+      return;
+    }
+    if (clashTitle !== null) {
+      onProposal({ label: 'Overlaps a meeting', book: null });
       return;
     }
     const start = new Date(startMs);
@@ -438,7 +480,7 @@ function TimePicker({
         : `Reserve ${formatTime(start, tz)} – ${formatTime(new Date(endMs), tz)}`,
       book: () => ({ startAt: start, minutes, immediate }),
     });
-  }, [none, immediate, minutes, startMs, endMs, tz, onProposal]);
+  }, [none, clashTitle, immediate, minutes, startMs, endMs, tz, onProposal]);
 
   if (none) {
     return <p className="text-3xl text-white/60">No free time left today.</p>;
@@ -451,10 +493,11 @@ function TimePicker({
           <Pin
             label="From"
             value={immediate ? 'Now' : formatTime(startAt, tz)}
+            warning={fromClash || bothClash}
             onMinus={() => setFrom(from - 1)}
             onPlus={() => setFrom(from + 1)}
-            minusDisabled={busy || from <= nowUnit || !isFree(from - 1)}
-            plusDisabled={busy || from + 1 >= to || !isFree(from + 1)}
+            minusDisabled={busy || from <= nowUnit}
+            plusDisabled={busy || from + 1 >= to}
           />
           <div className="w-60 shrink-0 pb-6 text-center">
             <div className="text-lg uppercase tracking-[0.2em] text-white/50">Duration</div>
@@ -465,12 +508,21 @@ function TimePicker({
           <Pin
             label="To"
             value={formatTime(endAt, tz)}
+            warning={toClash || bothClash}
             onMinus={() => setTo(to - 1)}
             onPlus={() => setTo(to + 1)}
             minusDisabled={busy || to - 1 <= from}
             plusDisabled={busy || to + 1 > limit}
           />
         </div>
+
+        {/* Always present, so the track does not move when a warning appears. */}
+        <p
+          className="-my-6 h-8 text-center text-xl font-semibold text-attention"
+          aria-live="polite"
+        >
+          {clash ? `Overlaps “${clash.title}”` : ''}
+        </p>
 
         <div className="flex items-start gap-4">
           <button
@@ -496,14 +548,19 @@ function TimePicker({
             >
               <Slider.Track className="relative h-6 grow overflow-hidden rounded-full bg-white/10">
                 <BlockedSpans blocked={blocked} from={windowStart} to={windowEnd} />
-                <Slider.Range className="absolute h-full bg-emerald-400" />
+                <Slider.Range
+                  className={cn(
+                    'absolute h-full transition-colors duration-400',
+                    clash ? 'bg-attention' : 'bg-emerald-400',
+                  )}
+                />
               </Slider.Track>
               <Slider.Thumb
-                className="block h-14 w-14 rounded-full bg-white shadow-lg ring-4 ring-emerald-400/30 focus:outline-none"
+                className={cn(thumbClass, fromClash || bothClash ? thumbWarn : thumbOk)}
                 aria-label="From"
               />
               <Slider.Thumb
-                className="block h-14 w-14 rounded-full bg-white shadow-lg ring-4 ring-emerald-400/30 focus:outline-none"
+                className={cn(thumbClass, toClash || bothClash ? thumbWarn : thumbOk)}
                 aria-label="To"
               />
             </Slider.Root>
@@ -529,6 +586,7 @@ function TimePicker({
 function Pin({
   label,
   value,
+  warning = false,
   onMinus,
   onPlus,
   minusDisabled,
@@ -536,6 +594,8 @@ function Pin({
 }: {
   label: string;
   value: string;
+  /** The time sits inside a meeting: shown in the warning colour. */
+  warning?: boolean;
   onMinus: () => void;
   onPlus: () => void;
   minusDisabled: boolean;
@@ -544,7 +604,14 @@ function Pin({
   return (
     <div className="text-center">
       <div className="text-lg uppercase tracking-[0.2em] text-white/50">{label}</div>
-      <div className="tabular mt-1 text-6xl font-extrabold">{value}</div>
+      <div
+        className={cn(
+          'tabular mt-1 text-6xl font-extrabold transition-colors duration-400',
+          warning && 'text-attention',
+        )}
+      >
+        {value}
+      </div>
       <div className="mt-3 flex items-center justify-center gap-3">
         <button
           type="button"

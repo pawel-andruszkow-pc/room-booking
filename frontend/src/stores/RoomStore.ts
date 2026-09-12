@@ -119,6 +119,11 @@ export class RoomStore {
     return minutesBetween(this.clock.now, until);
   }
 
+  /** True while the room is taken by a full-day reservation. */
+  get isAllDay(): boolean {
+    return this.current?.isAllDay ?? false;
+  }
+
   /** The meeting that starts right after the current one, when there is no gap. */
   get followingMeeting(): CalendarEvent | null {
     const current = this.current;

@@ -60,6 +60,7 @@ export interface RoomStatus {
   room: Pick<Room, 'id' | 'name' | 'location' | 'capacity' | 'calendarId'>;
   now: string;
   state: RoomState;
+  /** `current.isAllDay`: a full-day reservation (all-day entry or a meeting covering the whole day): never asked about, cannot be ended. */
   current: CalendarEvent | null;
   next: CalendarEvent | null;
   /** End of the back-to-back block the current meeting belongs to; null while free. */
@@ -84,6 +85,8 @@ export interface RoomDay {
   dayEnd: string;
   timezone: string;
   events: CalendarEvent[];
+  /** Full-day reservations, clamped to this day. */
+  allDay: CalendarEvent[];
 }
 
 export interface CalendarSummary {

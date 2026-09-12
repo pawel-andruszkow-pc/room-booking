@@ -5,6 +5,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { auth as googleAuth, calendar, calendar_v3 } from '@googleapis/calendar';
+import { fromZonedTime } from 'date-fns-tz';
 import { appConfig } from '../config/app-config';
 import {
   CalendarEvent,
@@ -112,6 +113,7 @@ export class GoogleCalendarProvider implements CalendarProvider {
 
   async listEvents(calendarId: string, from: Date, to: Date): Promise<CalendarEvent[]> {
     let items: calendar_v3.Schema$Event[];
+    let timeZone: string | undefined;
     try {
       const res = await this.api().events.list({
         calendarId,
@@ -123,6 +125,7 @@ export class GoogleCalendarProvider implements CalendarProvider {
         maxResults: 100,
       });
       items = res.data.items ?? [];
+      timeZone = res.data.timeZone ?? undefined;
     } catch (err) {
       // The most common misconfiguration: a room whose calendar id does not
       // exist in Google (e.g. seed rooms made for the local provider) or was
@@ -140,7 +143,7 @@ export class GoogleCalendarProvider implements CalendarProvider {
 
     return items
       .filter((item) => item.status !== 'cancelled' && !isDeclinedByRoom(item))
-      .map(toCalendarEvent)
+      .map((item) => toCalendarEvent(item, timeZone))
       .filter((event): event is CalendarEvent => event !== null);
   }
 
@@ -282,19 +285,30 @@ function isForbidden(err: unknown): boolean {
   return code === 403 || status === 403;
 }
 
-function toCalendarEvent(item: calendar_v3.Schema$Event): CalendarEvent | null {
+/**
+ * `timeZone` is the calendar's own zone (from the events.list response). An
+ * all-day event carries bare dates, and "2025-03-05" means midnight in that
+ * zone — not UTC, which would shift the block by an hour or two and let it
+ * spill into the wrong day.
+ */
+function toCalendarEvent(
+  item: calendar_v3.Schema$Event,
+  timeZone?: string,
+): CalendarEvent | null {
   const startRaw = item.start?.dateTime ?? item.start?.date;
   const endRaw = item.end?.dateTime ?? item.end?.date;
   if (!item.id || !startRaw || !endRaw) return null;
 
   const isAllDay = !item.start?.dateTime;
+  const toInstant = (raw: string): Date =>
+    isAllDay && timeZone ? fromZonedTime(raw, timeZone) : new Date(raw);
   return {
     id: item.id,
     title: item.summary?.trim() || 'Busy',
     description: item.description ?? null,
     organizer: item.organizer?.displayName ?? item.organizer?.email ?? null,
-    start: new Date(startRaw).toISOString(),
-    end: new Date(endRaw).toISOString(),
+    start: toInstant(startRaw).toISOString(),
+    end: toInstant(endRaw).toISOString(),
     isAllDay,
     source: 'google',
     htmlLink: item.htmlLink ?? null,

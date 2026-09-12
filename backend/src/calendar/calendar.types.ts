@@ -19,6 +19,8 @@ export interface CreateEventInput {
   description?: string | null;
   start: Date;
   end: Date;
+  /** Local provider only: store the event as a full-day reservation. */
+  isAllDay?: boolean;
 }
 
 export interface ConnectionTestResult {

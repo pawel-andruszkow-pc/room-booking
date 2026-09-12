@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Headers,
   HttpCode,
@@ -10,6 +11,7 @@ import {
   Sse,
 } from '@nestjs/common';
 import { Observable, map } from 'rxjs';
+import { RequirePin } from '../common/require-pin.decorator';
 import { BookingsService } from './bookings.service';
 import { RoomStreamService } from './room-stream.service';
 import { BookRoomDto } from './dto/book-room.dto';
@@ -76,5 +78,18 @@ export class BookingsController {
   @HttpCode(200)
   release(@Param('roomId', ParseUUIDPipe) roomId: string, @Body() dto: EventActionDto) {
     return this.bookings.release(roomId, dto.eventId);
+  }
+
+  /**
+   * Removes one of today's meetings from the calendar, running or not. Behind
+   * the settings PIN, unlike the room screen's "Free up the room".
+   */
+  @Delete('events/:eventId')
+  @RequirePin('settings')
+  removeEvent(
+    @Param('roomId', ParseUUIDPipe) roomId: string,
+    @Param('eventId') eventId: string,
+  ) {
+    return this.bookings.removeEvent(roomId, eventId);
   }
 }

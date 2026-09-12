@@ -71,6 +71,7 @@ export class LocalCalendarProvider implements CalendarProvider {
         organizer: null,
         startsAt: input.start,
         endsAt: input.end,
+        isAllDay: input.isAllDay ?? false,
       }),
     );
     return toCalendarEvent(row);
@@ -105,7 +106,7 @@ function toCalendarEvent(row: LocalEvent): CalendarEvent {
     organizer: row.organizer,
     start: row.startsAt.toISOString(),
     end: row.endsAt.toISOString(),
-    isAllDay: false,
+    isAllDay: row.isAllDay,
     source: 'local',
     htmlLink: null,
   };

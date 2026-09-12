@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   Logger,
+  NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -38,6 +39,20 @@ const BACK_TO_BACK_TOLERANCE_MS = 60_000;
 /** A start time this close to now is treated as "now" rather than a reservation. */
 const START_NOW_TOLERANCE_MS = 60_000;
 
+/**
+ * Today's calendar, split the way the booking logic reads it. A full-day event
+ * — an all-day entry, or a timed one that covers the whole day, which is how
+ * some people book a room "for the day" — is a reservation of the whole day:
+ * it is never asked about, never ended from the tablet, and blocks every slot.
+ * So it is kept apart from the timed meetings the check-in and back-to-back
+ * logic reason about, marked `isAllDay` either way, and its start and end are
+ * clamped to the room's day, so a multi-day block reads as "today" too.
+ */
+interface DayEvents {
+  timed: CalendarEvent[];
+  allDay: CalendarEvent[];
+}
+
 @Injectable()
 export class BookingsService {
   private readonly logger = new Logger(BookingsService.name);
@@ -58,14 +73,19 @@ export class BookingsService {
     const now = new Date();
     const { dayEnd } = this.dayBounds(now, settings.timezone);
 
-    const events = await this.todaysEvents(room, now, settings.timezone);
-    let current =
-      events.find((e) => toDate(e.start) <= now && toDate(e.end) > now) ?? null;
-    const next = events.find((e) => toDate(e.start) > now) ?? null;
+    const { timed, allDay } = await this.todaysEvents(room, now, settings.timezone);
+    // A full-day reservation owns the room whatever else is in the calendar.
+    let current: CalendarEvent | null =
+      allDay[0] ??
+      timed.find((e) => toDate(e.start) <= now && toDate(e.end) > now) ??
+      null;
+    const next = timed.find((e) => toDate(e.start) > now) ?? null;
 
     let checkIn: RoomStatus['checkIn'] = null;
     let releasedEventId: string | null = null;
-    if (current && settings.checkInEnabled) {
+    // Nobody is expected to "show up" for a day-long block, so it is never
+    // asked about and never auto-released.
+    if (current && !current.isAllDay && settings.checkInEnabled) {
       const result = await this.resolveCheckIn(room, current, now, settings, opts);
       if (result.released) {
         releasedEventId = current.id;
@@ -75,7 +95,7 @@ export class BookingsService {
       }
     }
 
-    const busyUntil = current ? busyBlockEnd(current, events) : null;
+    const busyUntil = current ? busyBlockEnd(current, timed) : null;
     const freeUntil = current ? null : next ? toDate(next.start) : dayEnd;
     const availableMinutes = current
       ? 0
@@ -109,7 +129,9 @@ export class BookingsService {
       checkIn,
       freeUntil: freeUntil ? freeUntil.toISOString() : null,
       availableMinutes,
-      events: events.filter((e) => toDate(e.end) > now && e.id !== releasedEventId),
+      events: [...allDay, ...timed].filter(
+        (e) => toDate(e.end) > now && e.id !== releasedEventId,
+      ),
       settings: {
         checkInEnabled: settings.checkInEnabled,
         checkInMinutes: settings.checkInMinutes,
@@ -120,13 +142,13 @@ export class BookingsService {
     };
   }
 
-  /** Every timed event today (including finished ones) for the "Today" page. */
+  /** Every event today (including finished ones) for the "Today" page. */
   async getDay(roomId: string): Promise<RoomDay> {
     const room = await this.rooms.findOne(roomId);
     const settings = await this.settings.get();
     const now = new Date();
     const { dayStart, dayEnd } = this.dayBounds(now, settings.timezone);
-    const events = await this.todaysEvents(room, now, settings.timezone);
+    const { timed, allDay } = await this.todaysEvents(room, now, settings.timezone);
     return {
       room: {
         id: room.id,
@@ -138,7 +160,8 @@ export class BookingsService {
       dayStart: dayStart.toISOString(),
       dayEnd: dayEnd.toISOString(),
       timezone: settings.timezone,
-      events,
+      events: timed,
+      allDay,
     };
   }
 
@@ -220,8 +243,13 @@ export class BookingsService {
       throw new BadRequestException('A booking has to end on the same day');
     }
 
-    const events = await this.todaysEvents(room, now, settings.timezone);
-    const clash = events.find((e) => toDate(e.start) < end && toDate(e.end) > start);
+    const { timed, allDay } = await this.todaysEvents(room, now, settings.timezone);
+    if (allDay.length > 0) {
+      throw new ConflictException(
+        `The room is reserved all day for "${allDay[0].title}"`,
+      );
+    }
+    const clash = timed.find((e) => toDate(e.start) < end && toDate(e.end) > start);
     if (clash) {
       throw new ConflictException(`Overlaps "${clash.title}"`);
     }
@@ -248,6 +276,28 @@ export class BookingsService {
     const { room, event } = await this.findRunningEvent(roomId, eventId);
     await this.releaseEvent(room, event, new Date());
     return this.getStatus(roomId, { fromDevice: true });
+  }
+
+  /**
+   * Deletes one of today's meetings. Reached from the PIN-protected settings
+   * screen, so unlike "Free up the room" it is not limited to the meeting in
+   * progress. On a Google resource calendar the room may only be able to
+   * decline a meeting it does not own; that frees the room just the same.
+   */
+  async removeEvent(roomId: string, eventId: string): Promise<RoomDay> {
+    const room = await this.rooms.findOne(roomId);
+    const settings = await this.settings.get();
+    const { timed, allDay } = await this.todaysEvents(
+      room,
+      new Date(),
+      settings.timezone,
+    );
+    const event = [...allDay, ...timed].find((e) => e.id === eventId);
+    if (!event) throw new NotFoundException("Event not found in today's calendar");
+    await this.calendar.deleteEvent(room.calendarId, event.id);
+    this.changes.notify(room.calendarId);
+    this.logger.log(`Removed "${event.title}" from ${room.name} via settings`);
+    return this.getDay(roomId);
   }
 
   /** Releases every pending check-in whose deadline passed. Called by the cron job. */
@@ -339,9 +389,14 @@ export class BookingsService {
     const room = await this.rooms.findOne(roomId);
     const settings = await this.settings.get();
     const now = new Date();
-    const events = await this.todaysEvents(room, now, settings.timezone);
-    const event = events.find((e) => e.id === eventId);
+    const { timed, allDay } = await this.todaysEvents(room, now, settings.timezone);
+    const event = [...allDay, ...timed].find((e) => e.id === eventId);
     if (!event) throw new BadRequestException("Event not found in today's calendar");
+    if (event.isAllDay) {
+      throw new ConflictException(
+        'A full-day reservation cannot be ended from the tablet',
+      );
+    }
     if (toDate(event.start) > now || toDate(event.end) <= now) {
       throw new ConflictException('Event is not running right now');
     }
@@ -352,12 +407,27 @@ export class BookingsService {
     room: Pick<Room, 'calendarId'>,
     now: Date,
     timezone: string,
-  ): Promise<CalendarEvent[]> {
+  ): Promise<DayEvents> {
     const { dayStart, dayEnd } = this.dayBounds(now, timezone);
     const events = await this.calendar.listEvents(room.calendarId, dayStart, dayEnd);
-    return events
-      .filter((e) => !e.isAllDay)
-      .sort((a, b) => toDate(a.start).getTime() - toDate(b.start).getTime());
+    const byStart = (a: CalendarEvent, b: CalendarEvent) =>
+      toDate(a.start).getTime() - toDate(b.start).getTime();
+    const coversDay = (e: CalendarEvent) =>
+      e.isAllDay || (toDate(e.start) <= dayStart && toDate(e.end) >= dayEnd);
+    return {
+      timed: events.filter((e) => !coversDay(e)).sort(byStart),
+      allDay: events
+        .filter(
+          (e) => coversDay(e) && toDate(e.start) < dayEnd && toDate(e.end) > dayStart,
+        )
+        .map((e) => ({
+          ...e,
+          isAllDay: true,
+          start: maxDate(toDate(e.start), dayStart).toISOString(),
+          end: minDate(toDate(e.end), dayEnd).toISOString(),
+        }))
+        .sort(byStart),
+    };
   }
 
   private dayBounds(now: Date, timezone: string): { dayStart: Date; dayEnd: Date } {
@@ -445,6 +515,14 @@ function busyBlockEnd(current: CalendarEvent, events: CalendarEvent[]): Date {
 
 function toDate(iso: string): Date {
   return new Date(iso);
+}
+
+function maxDate(a: Date, b: Date): Date {
+  return a > b ? a : b;
+}
+
+function minDate(a: Date, b: Date): Date {
+  return a < b ? a : b;
 }
 
 /** Postgres unique-violation (SQLSTATE 23505) — a concurrent insert won. */

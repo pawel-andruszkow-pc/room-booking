@@ -95,6 +95,21 @@ export class DayStore {
     }
   }
 
+  /**
+   * Deletes a meeting from the calendar (settings PIN) and shows the day the
+   * server returns without it, so the list updates before the next poll.
+   */
+  async removeEvent(eventId: string): Promise<void> {
+    const roomId = this.roomId;
+    if (!roomId) return;
+    const day = await api.rooms.removeEvent(roomId, eventId);
+    if (this.roomId !== roomId) return;
+    runInAction(() => {
+      this.day = day;
+      this.error = null;
+    });
+  }
+
   private schedule() {
     this.clearTimer();
     this.timer = window.setTimeout(() => void this.refresh(), POLL_MS);

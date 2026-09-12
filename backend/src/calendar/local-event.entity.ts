@@ -29,6 +29,10 @@ export class LocalEvent {
   @Column({ type: 'timestamptz' })
   endsAt: Date;
 
+  /** A full-day reservation; startsAt/endsAt then bound the day. */
+  @Column({ type: 'boolean', default: false })
+  isAllDay: boolean;
+
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 }

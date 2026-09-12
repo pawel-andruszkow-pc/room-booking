@@ -49,14 +49,32 @@ export const TodayPage = observer(function TodayPage() {
             <Spinner className="h-10 w-10" />
           </div>
         )
-      ) : day.events.length === 0 ? (
+      ) : day.events.length === 0 && day.allDay.length === 0 ? (
         <p className="text-3xl text-white/60">No meetings today. The room is free all day.</p>
       ) : (
-        <DayTimeline day={day} now={now} tz={tz} />
+        <>
+          {day.allDay.map((event) => (
+            <AllDayBanner key={event.id} event={event} />
+          ))}
+          <DayTimeline day={day} now={now} tz={tz} />
+        </>
       )}
     </PageShell>
   );
 });
+
+/**
+ * A full-day reservation sits above the scale rather than on it: drawn as a
+ * 24-hour block it would push every real meeting into a half-width lane.
+ */
+function AllDayBanner({ event }: { event: CalendarEvent }) {
+  return (
+    <div className="mb-6 flex items-center gap-4 rounded-xl border border-white bg-white px-4 py-4 text-ink">
+      <span className="min-w-0 flex-1 truncate text-2xl font-semibold">{event.title}</span>
+      <span className="shrink-0 text-xl font-bold text-ink/75">All day</span>
+    </div>
+  );
+}
 
 interface Slot {
   event: CalendarEvent;

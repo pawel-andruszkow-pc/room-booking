@@ -24,7 +24,13 @@ import { formatCountdown, formatDuration, formatTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 
 /** Every state headline is one short word, so they all share a size. */
-const headlineClass = 'text-[clamp(8rem,13.5vw,15rem)] font-extrabold leading-[0.9] tracking-tight';
+/**
+ * The state word. "B" and "F" both carry a 0.07em left side bearing in Manrope
+ * ExtraBold, which at this size is a visible indent next to the room name and
+ * the footer button; the negative margin pulls the stem onto the page margin.
+ */
+const headlineClass =
+  '-ml-[0.05em] text-[clamp(8rem,13.5vw,15rem)] font-extrabold leading-[0.9] tracking-tight';
 
 /**
  * Free and busy share one layout (see design): the state word on the left, a
@@ -34,6 +40,16 @@ const splitClass = 'flex items-stretch gap-[clamp(2rem,4vw,5rem)]';
 const splitLeftClass = 'flex min-w-0 flex-1 flex-col justify-center';
 const splitRightClass =
   'flex w-[45%] shrink-0 flex-col justify-center border-l border-white/25 pl-[clamp(2rem,3.5vw,4rem)]';
+
+/**
+ * The name of the meeting the room is busy with, above the "Busy" headline.
+ * ExtraLight — the lightest weight Manrope has — so it reads as a caption to
+ * the state word below it, not as a second headline. Two lines at most.
+ * Hung above the headline out of flow, so "Busy" sits exactly where it would
+ * without a name (and where "Free" sits on the free screen).
+ */
+const meetingNameClass =
+  'absolute inset-x-0 bottom-full mb-[clamp(0.75rem,1.2vw,1.5rem)] line-clamp-2 text-[clamp(1.75rem,2.9vw,3.375rem)] font-extralight leading-tight text-white/90';
 
 /** Small heading above the figure in the right-hand column. */
 const panelLabelClass =
@@ -252,11 +268,7 @@ export const RoomPage = observer(function RoomPage() {
               </motion.div>
             ) : state === 'awaiting-check-in' && room.current ? (
               <motion.div key="check" {...stateMotion(instant)} className={splitClass}>
-                <div className={splitLeftClass}>
-                  <motion.h1 {...headlineMotion(instant)} className={headlineClass}>
-                    Busy
-                  </motion.h1>
-                </div>
+                <BusyHeadline instant={instant} title={room.current.title} />
                 <div className={splitRightClass}>
                   <p className="text-[clamp(1.75rem,2.9vw,3.375rem)] font-bold leading-tight">
                     Is this meeting taking place?
@@ -286,13 +298,24 @@ export const RoomPage = observer(function RoomPage() {
                   </div>
                 </div>
               </motion.div>
+            ) : room.current && room.isAllDay ? (
+              // A full-day reservation: nothing to count down to and nothing
+              // to tap — the footer has no "Free up the room" for it either.
+              <motion.div key="all-day" {...stateMotion(instant)} className={splitClass}>
+                <BusyHeadline instant={instant} title={room.current.title} />
+                <DetailPanel
+                  icon={CalendarDays}
+                  label="All day"
+                  value="Full-day reservation"
+                  // Too long for the countdown's size; one step down lets it
+                  // wrap into two readable lines instead of overflowing.
+                  valueClassName="text-[clamp(2.5rem,4.4vw,5rem)] leading-[1.05]"
+                  note="This reservation cannot be cancelled."
+                />
+              </motion.div>
             ) : room.current ? (
               <motion.div key="busy" {...stateMotion(instant)} className={splitClass}>
-                <div className={splitLeftClass}>
-                  <motion.h1 {...headlineMotion(instant)} className={headlineClass}>
-                    Busy
-                  </motion.h1>
-                </div>
+                <BusyHeadline instant={instant} title={room.current.title} />
                 <DetailPanel
                   icon={Timer}
                   label="Free in"
@@ -356,9 +379,9 @@ export const RoomPage = observer(function RoomPage() {
                 </Button>
               </motion.div>
             )}
-            {state === 'busy' && (
-              <motion.div key="free-room" {...panelMotion(instant)} className="w-full">
-                <FreeRoomButton
+            {state === 'busy' && !room.isAllDay && (
+              <motion.div key="busy-actions" {...panelMotion(instant)} className="w-full">
+                <BusyActions
                   confirming={confirmFree}
                   disabled={room.busy}
                   onConfirmingChange={setConfirmFree}
@@ -366,6 +389,7 @@ export const RoomPage = observer(function RoomPage() {
                     setConfirmFree(false);
                     act(room.endMeeting);
                   }}
+                  onBookLater={() => navigate('/book?when=later')}
                 />
               </motion.div>
             )}
@@ -375,6 +399,24 @@ export const RoomPage = observer(function RoomPage() {
     </div>
   );
 });
+
+/**
+ * Left column of every busy state: the meeting `title` hangs above the state
+ * word without moving it.
+ */
+function BusyHeadline({ instant, title }: { instant: boolean; title?: string }) {
+  return (
+    <div className={splitLeftClass}>
+      {/* Content-sized wrapper: the title hangs off the headline, not the column. */}
+      <div className="relative">
+        {title && <p className={meetingNameClass}>{title}</p>}
+        <motion.h1 {...headlineMotion(instant)} className={headlineClass}>
+          Busy
+        </motion.h1>
+      </div>
+    </div>
+  );
+}
 
 /**
  * Right-hand column of the split states: a small label, the figure that matters
@@ -391,7 +433,8 @@ function DetailPanel({
   icon: LucideIcon;
   label: string;
   value: string;
-  at: string;
+  /** Clock time the figure refers to; a full-day reservation has none. */
+  at?: string;
   /** Small trailing line, e.g. the meeting that follows without a break. */
   note?: string;
   /** Extra classes for the figure, e.g. the orange "meeting soon" colour. */
@@ -399,26 +442,30 @@ function DetailPanel({
 }) {
   return (
     <div className={splitRightClass}>
-      <div className={panelLabelClass}>
-        <Icon className="h-[1.15em] w-[1.15em] shrink-0" />
-        {label}
-      </div>
-      <div
-        className={cn(
-          'mt-[clamp(0.75rem,1.2vw,1.5rem)] text-[clamp(3.25rem,5.8vw,6.5rem)] font-extrabold leading-none tracking-tight transition-colors duration-500',
-          valueClassName,
-        )}
-      >
-        {value}
-      </div>
-      <div className="tabular mt-[clamp(0.5rem,0.8vw,1rem)] text-[clamp(1.75rem,2.8vw,3.25rem)] font-semibold text-white/90">
-        at {at}
-      </div>
-      {note && (
-        <div className="mt-[clamp(0.5rem,0.8vw,1rem)] truncate text-[clamp(1.1rem,1.6vw,1.75rem)] text-white/70">
-          {note}
+      <div>
+        <div className={panelLabelClass}>
+          <Icon className="h-[1.15em] w-[1.15em] shrink-0" />
+          {label}
         </div>
-      )}
+        <div
+          className={cn(
+            'mt-[clamp(0.75rem,1.2vw,1.5rem)] text-[clamp(3.25rem,5.8vw,6.5rem)] font-extrabold leading-none tracking-tight transition-colors duration-500',
+            valueClassName,
+          )}
+        >
+          {value}
+        </div>
+        {at && (
+          <div className="tabular mt-[clamp(0.5rem,0.8vw,1rem)] text-[clamp(1.75rem,2.8vw,3.25rem)] font-semibold text-white/90">
+            at {at}
+          </div>
+        )}
+        {note && (
+          <div className="mt-[clamp(0.5rem,0.8vw,1rem)] truncate text-[clamp(1.1rem,1.6vw,1.75rem)] text-white/70">
+            {note}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -435,39 +482,48 @@ const CountdownLabel = observer(function CountdownLabel() {
 });
 
 /**
- * Two-step "Free up the room" without a modal. The button row stays in place;
- * the parent dims the screen and shows the "Free up the room?" title while
- * `confirming` is true.
+ * Footer of a busy room: "Free up the room" and, beside it, a way to reserve
+ * a slot after this meeting without freeing anything. A tap on the first one
+ * swaps the pair for its confirmation, so the row keeps its shape: the parent
+ * dims the screen and shows the "Free up the room?" title while `confirming`.
  *
  * The label says what the tap does to the room, not to the meeting: "End
  * meeting" read as if it would cancel the meeting itself for everyone, which
  * is exactly what someone standing in front of a booked room does not want.
  */
-function FreeRoomButton({
+function BusyActions({
   confirming,
   disabled,
   onConfirmingChange,
   onConfirm,
+  onBookLater,
 }: {
   confirming: boolean;
   disabled: boolean;
   onConfirmingChange: (value: boolean) => void;
   onConfirm: () => void;
+  onBookLater: () => void;
 }) {
   if (!confirming) {
     return (
-      // Not dimmed while the booking that made the room busy is still being
-      // confirmed: the store ignores a tap during those few hundred ms anyway,
-      // and a button that fades in at 40% and then snaps to full reads as a glitch.
-      <Button
-        size="xl"
-        variant="primary"
-        className="disabled:opacity-100"
-        disabled={disabled}
-        onClick={() => onConfirmingChange(true)}
-      >
-        Free up the room
-      </Button>
+      <div className={pairClass}>
+        {/* Not dimmed while the booking that made the room busy is still being
+            confirmed: the store ignores a tap during those few hundred ms anyway,
+            and a button that fades in at 40% and then snaps to full reads as a glitch. */}
+        <Button
+          size="xl"
+          variant="primary"
+          className={cn(pairButtonClass, 'disabled:opacity-100')}
+          disabled={disabled}
+          onClick={() => onConfirmingChange(true)}
+        >
+          <span className="truncate">Free up the room</span>
+        </Button>
+        <Button size="xl" variant="outline" className={pairButtonClass} onClick={onBookLater}>
+          <CalendarPlus className="h-[1.2em] w-[1.2em] shrink-0" />
+          <span className="truncate">Book for later</span>
+        </Button>
+      </div>
     );
   }
   return (

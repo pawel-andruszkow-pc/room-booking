@@ -1,4 +1,4 @@
-import { IsDateString, IsOptional, IsString, Length } from 'class-validator';
+import { IsBoolean, IsDateString, IsOptional, IsString, Length } from 'class-validator';
 
 /** Admin helper for the local provider: add a test meeting to a calendar. */
 export class CreateLocalEventDto {
@@ -20,4 +20,9 @@ export class CreateLocalEventDto {
 
   @IsDateString()
   end: string;
+
+  /** Full-day reservation: start/end should bound the day. */
+  @IsOptional()
+  @IsBoolean()
+  isAllDay?: boolean;
 }
