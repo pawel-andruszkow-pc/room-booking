@@ -22,6 +22,7 @@ import { Clock } from '@/components/Clock';
 import { Spinner } from '@/components/ui/spinner';
 import { formatCountdown, formatDuration, formatTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
+import { roomIsFree } from '@/types';
 
 /** Every state headline is one short word, so they all share a size. */
 /**
@@ -31,6 +32,14 @@ import { cn } from '@/lib/utils';
  */
 const headlineClass =
   '-ml-[0.05em] text-[clamp(8rem,13.5vw,15rem)] font-extrabold leading-[0.9] tracking-tight';
+
+/**
+ * "Busy soon" is the only state that needs two words. At the shared headline
+ * size it runs off the column, so it steps down one notch — still unmistakably
+ * the headline, still on one line at tablet widths.
+ */
+const soonHeadlineClass =
+  '-ml-[0.05em] text-[clamp(4.5rem,8vw,9rem)] font-extrabold leading-[0.95] tracking-tight';
 
 /**
  * Free and busy share one layout (see design): the state word on the left, a
@@ -153,7 +162,7 @@ export const RoomPage = observer(function RoomPage() {
 
   const status = room.status;
   const tz = room.timezone;
-  const bg = !status ? 'bg-ink' : state === 'free' ? 'bg-free' : 'bg-busy';
+  const bg = !status ? 'bg-ink' : roomIsFree(state) ? 'bg-free' : 'bg-busy';
   // A tap on this tablet switches the screen instantly; only changes that
   // arrive from the clock or the calendar get the free/busy animation.
   const instant = room.changedByUser;
@@ -251,6 +260,25 @@ export const RoomPage = observer(function RoomPage() {
                     </div>
                   </div>
                 )}
+              </motion.div>
+            ) : state === 'busy-soon' && room.next ? (
+              // Still free, but only just: the meeting that is about to take
+              // the room hangs above the headline, the way a running one does.
+              <motion.div key="soon" {...stateMotion(instant)} className={splitClass}>
+                <div className={splitLeftClass}>
+                  <div className="relative">
+                    <p className={meetingNameClass}>{room.next.title}</p>
+                    <motion.h1 {...headlineMotion(instant)} className={soonHeadlineClass}>
+                      Busy soon
+                    </motion.h1>
+                  </div>
+                </div>
+                <DetailPanel
+                  icon={CalendarClock}
+                  label="Starts in"
+                  value={formatDuration(room.minutesUntilNext ?? 0)}
+                  at={formatTime(room.next.start, tz)}
+                />
               </motion.div>
             ) : state === 'awaiting-check-in' && room.current ? (
               <motion.div key="check" {...stateMotion(instant)} className={splitClass}>
@@ -365,6 +393,74 @@ export const RoomPage = observer(function RoomPage() {
                 </Button>
               </motion.div>
             )}
+            {state === 'busy-soon' && status?.settings.checkInEnabled && (
+              <motion.div key="soon-actions" {...panelMotion(instant)} className="w-full">
+                {/* The one place a tap on this tablet is animated rather than
+                    switched instantly: the swap IS the acknowledgement of the
+                    tap, so the white pill shrinking away as the disc springs in
+                    is the feedback. `mode="wait"` keeps them from overlapping,
+                    which at this size would read as two buttons at once. */}
+                <AnimatePresence mode="wait" initial={false}>
+                {room.upcomingConfirmed ? (
+                  // Answered — and the confirmation is itself the way back out,
+                  // so the screen keeps one tap target where it had one button
+                  // rather than growing a second control beside it. The second
+                  // line has to say so: an undo nothing points at is an undo
+                  // nobody finds. Sized off the xl button it replaces, not off
+                  // the viewport, so it reads at the same weight as the tap
+                  // that got here (`size="xl"` is fixed at h-24 / text-3xl).
+                  <motion.button
+                    key="checked-in"
+                    type="button"
+                    aria-label="Cancel check-in"
+                    disabled={room.busy}
+                    onClick={() => act(room.cancelUpcoming)}
+                    className="flex h-24 items-center gap-5 rounded-3xl text-left transition-transform duration-150 ease-out select-none active:scale-[0.97] disabled:pointer-events-none"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0, transition: { duration: 0.1 } }}
+                    transition={{ duration: 0.13 }}
+                  >
+                    <CheckedInMark className="h-20 w-20 shrink-0 text-white" />
+                    {/* Trails the disc in from behind it, so the eye lands on
+                        the mark first and reads the words second. */}
+                    <motion.div
+                      className="min-w-0"
+                      initial={{ opacity: 0, x: -14 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.04, duration: 0.2, ease: 'easeOut' }}
+                    >
+                      <div className="truncate text-3xl font-bold leading-tight">
+                        You&apos;re checked in
+                      </div>
+                      <div className="truncate text-xl text-white/75">
+                        The room is held for you. Tap to cancel.
+                      </div>
+                    </motion.div>
+                  </motion.button>
+                ) : (
+                  // Shrinks away rather than just fading, so the white mass of
+                  // the pill reads as collapsing into the disc that replaces it.
+                  <motion.div
+                    key="confirm"
+                    initial={{ opacity: 0, scale: 0.94 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.88 }}
+                    transition={{ duration: 0.12, ease: 'easeOut' }}
+                  >
+                    <Button
+                      size="xl"
+                      disabled={room.busy}
+                      onClick={() => act(room.confirmUpcoming)}
+                    >
+                      <Check className="h-9 w-9" />
+                      I&apos;m already here
+                    </Button>
+                  </motion.div>
+                )}
+                </AnimatePresence>
+              </motion.div>
+            )}
             {state === 'busy' && !room.isAllDay && (
               <motion.div key="busy-actions" {...panelMotion(instant)} className="w-full">
                 <BusyActions
@@ -385,6 +481,50 @@ export const RoomPage = observer(function RoomPage() {
     </div>
   );
 });
+
+/**
+ * The confirmation mark: a solid disc with the tick cut clean out of it, so the
+ * room's own colour shows through the stroke instead of a second colour sitting
+ * on top of it. Lucide paints `circle-check` as a stroked path over the circle,
+ * which can be any colour but never transparent — so its geometry is redrawn
+ * here behind a mask that punches the tick out.
+ */
+function CheckedInMark({ className }: { className?: string }) {
+  return (
+    // The disc lands first and the tick is cut into it a moment later, so the
+    // answer reads as something the room did rather than a label that was
+    // always there. Spring, not a duration: it should feel like it snapped to.
+    <motion.svg
+      viewBox="0 0 24 24"
+      aria-hidden
+      className={className}
+      initial={{ scale: 0.3, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      transition={{ type: 'spring', stiffness: 720, damping: 26 }}
+    >
+      <mask id="checked-in-mark" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">
+        {/* White shows the disc, black hides the stroke under it. */}
+        <circle cx="12" cy="12" r="10" fill="white" />
+        {/* Lucide's tick, drawn backwards: its own path starts at the long
+            arm's top end, which animates as a stroke falling into the corner.
+            Reversed (same geometry, opposite direction) it goes short arm
+            first, the way the mark is written. */}
+        <motion.path
+          d="M8 12l2.5 2.5L16 9"
+          fill="none"
+          stroke="black"
+          strokeWidth="2.75"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          initial={{ pathLength: 0 }}
+          animate={{ pathLength: 1 }}
+          transition={{ delay: 0.07, duration: 0.18, ease: 'easeOut' }}
+        />
+      </mask>
+      <circle cx="12" cy="12" r="10" fill="currentColor" mask="url(#checked-in-mark)" />
+    </motion.svg>
+  );
+}
 
 /**
  * Left column of every busy state: the meeting `title` hangs above the state

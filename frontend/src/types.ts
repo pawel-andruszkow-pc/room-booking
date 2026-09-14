@@ -48,7 +48,13 @@ export interface PublicSettings {
   googleServiceAccountEmail: string | null;
 }
 
-export type RoomState = 'free' | 'busy' | 'awaiting-check-in';
+/** `busy-soon`: still free, but the next meeting is minutes away. */
+export type RoomState = 'free' | 'busy-soon' | 'busy' | 'awaiting-check-in';
+
+/** True while nothing is running in the room — "busy soon" included. */
+export function roomIsFree(state: RoomState): boolean {
+  return state === 'free' || state === 'busy-soon';
+}
 
 export interface CheckInStatus {
   pending: boolean;
@@ -67,6 +73,8 @@ export interface RoomStatus {
   busyUntil: string | null;
   checkIn: CheckInStatus | null;
   freeUntil: string | null;
+  /** Somebody already said "I'm already here" for `next`; only set while `busy-soon`. */
+  upcomingConfirmed: boolean;
   availableMinutes: number;
   events: CalendarEvent[];
   settings: {

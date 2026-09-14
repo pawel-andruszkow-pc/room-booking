@@ -1,7 +1,12 @@
 import { CalendarEvent } from '../calendar/calendar.types';
 import { Room } from '../rooms/room.entity';
 
-export type RoomState = 'free' | 'busy' | 'awaiting-check-in';
+/**
+ * `busy-soon` is the middle ground: the room is still free, but the next
+ * meeting is minutes away — long enough to walk in, not long enough to start
+ * anything. It is the one free state that offers "I'm already here".
+ */
+export type RoomState = 'free' | 'busy-soon' | 'busy' | 'awaiting-check-in';
 
 /** Whole-day agenda for the "Today" page. Returned by GET /rooms/:id/today. */
 export interface RoomDay {
@@ -47,6 +52,11 @@ export interface RoomStatus {
   checkIn: CheckInStatus | null;
   /** When the room is free: ISO time the next meeting starts, or end of the day. */
   freeUntil: string | null;
+  /**
+   * True once somebody has said "I'm already here" for `next`, so it starts as
+   * busy instead of asking. Only ever true while the state is `busy-soon`.
+   */
+  upcomingConfirmed: boolean;
   /** Longest ad-hoc booking that fits right now (0 while busy). */
   availableMinutes: number;
   /** Remaining events today, including the current one; a full-day reservation comes first. */

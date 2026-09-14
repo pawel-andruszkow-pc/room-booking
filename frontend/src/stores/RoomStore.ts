@@ -124,6 +124,11 @@ export class RoomStore {
     return minutesBetween(this.clock.now, until);
   }
 
+  /** True once "I'm already here" has been answered for the meeting about to start. */
+  get upcomingConfirmed(): boolean {
+    return this.status?.upcomingConfirmed ?? false;
+  }
+
   /** True while the room is taken by a full-day reservation. */
   get isAllDay(): boolean {
     return this.current?.isAllDay ?? false;
@@ -160,6 +165,11 @@ export class RoomStore {
     const candidates: number[] = [];
     if (this.status.current) candidates.push(new Date(this.status.current.end).getTime());
     if (this.status.next) candidates.push(new Date(this.status.next.start).getTime());
+    // "Free" turns into "Busy soon" before the meeting itself starts. Only
+    // while still free: once the screen says so, the start is the next
+    // boundary, and a candidate already behind us would pin the reaction.
+    if (this.status.state === 'free' && this.status.next)
+      candidates.push(new Date(this.status.next.start).getTime() - BUSY_SOON_MS);
     if (this.status.checkIn?.pending)
       candidates.push(new Date(this.status.checkIn.deadline).getTime());
     return candidates.length ? Math.min(...candidates) : null;
@@ -289,6 +299,30 @@ export class RoomStore {
     await this.mutate(
       (s) => predictConfirmed(s),
       (id) => api.rooms.checkIn(id, eventId),
+    );
+  }
+
+  /**
+   * "I'm already here": confirms presence for the meeting that is about to
+   * start, so it opens as busy instead of asking. Nothing about the room
+   * changes yet, only the answer it will not have to ask for.
+   */
+  async confirmUpcoming(): Promise<void> {
+    const eventId = this.next?.id;
+    if (!eventId) return;
+    await this.mutate(
+      (s) => ({ ...s, upcomingConfirmed: true }),
+      (id) => api.rooms.checkInEarly(id, eventId),
+    );
+  }
+
+  /** Takes back an early check-in: the meeting is asked about as usual. */
+  async cancelUpcoming(): Promise<void> {
+    const eventId = this.next?.id;
+    if (!eventId) return;
+    await this.mutate(
+      (s) => ({ ...s, upcomingConfirmed: false }),
+      (id) => api.rooms.cancelCheckInEarly(id, eventId),
     );
   }
 
@@ -451,6 +485,15 @@ export class RoomStore {
 /** Meetings starting this close to the previous end count as back-to-back. */
 const BACK_TO_BACK_TOLERANCE_MS = 60_000;
 
+/** Mirrors BUSY_SOON_MS in the backend's BookingsService — keep the two equal. */
+const BUSY_SOON_MS = 5 * 60_000;
+
+/** The free-side state: "busy soon" once the next meeting is minutes away. */
+function freeState(next: CalendarEvent | null, at: number): RoomState {
+  if (!next) return 'free';
+  return new Date(next.start).getTime() - at <= BUSY_SOON_MS ? 'busy-soon' : 'free';
+}
+
 /**
  * Re-derives the status from the events it already carries, as of `at`.
  *
@@ -488,13 +531,16 @@ function projectStatus(s: RoomStatus, now: Date): RoomStatus {
     allDay[0] ?? timed.find((e) => startsAt(e) <= at && endsAt(e) > at) ?? null;
   const next = timed.find((e) => startsAt(e) > at) ?? null;
   // Nothing has moved — not the state, and not the day's remaining events,
-  // which the booking screen lays the time picker out from.
+  // which the booking screen lays the time picker out from. "Busy soon" is the
+  // one change the events alone do not show: the same meeting is still next,
+  // it has only come close enough to take the screen over.
   const same = (a: CalendarEvent | null, b: CalendarEvent | null) =>
     (a?.id ?? null) === (b?.id ?? null);
   if (
     events.length === s.events.length &&
     same(current, s.current) &&
-    same(next, s.next)
+    same(next, s.next) &&
+    (current !== null || freeState(next, at) === s.state)
   ) {
     return s;
   }
@@ -510,7 +556,11 @@ function projectStatus(s: RoomStatus, now: Date): RoomStatus {
   }
 
   const checkIn = projectCheckIn(s, current, at);
-  const state: RoomState = !current ? 'free' : checkIn?.pending ? 'awaiting-check-in' : 'busy';
+  const state: RoomState = !current
+    ? freeState(next, at)
+    : checkIn?.pending
+      ? 'awaiting-check-in'
+      : 'busy';
 
   // With no meeting left today the day's end is unknown here; `predictFreed`
   // makes the same call, and the server response fills it in.
@@ -531,6 +581,9 @@ function projectStatus(s: RoomStatus, now: Date): RoomStatus {
     busyUntil: busyUntil === null ? null : new Date(busyUntil).toISOString(),
     checkIn,
     freeUntil,
+    // An early check-in belongs to one meeting; it means nothing once the
+    // screen is counting down to a different one.
+    upcomingConfirmed: s.upcomingConfirmed && next?.id === s.next?.id,
     availableMinutes,
     events,
   };
@@ -550,6 +603,12 @@ function projectCheckIn(s: RoomStatus, current: CalendarEvent | null, at: number
   if (current.id === s.current?.id) return s.checkIn;
   if (!s.settings.checkInEnabled) return null;
   const deadline = new Date(current.start).getTime() + s.settings.checkInMinutes * 60_000;
+  // Answered before it started ("I'm already here"), so it opens as busy. The
+  // backend agrees; without this the screen would flash the prompt for the
+  // round-trip it takes to say so.
+  if (s.upcomingConfirmed && current.id === s.next?.id) {
+    return { pending: false, confirmed: true, deadline: new Date(deadline).toISOString() };
+  }
   return {
     pending: at <= deadline,
     confirmed: at > deadline,
@@ -564,7 +623,10 @@ function predictBooked(
   title?: string,
 ): RoomStatus {
   const start = now.toISOString();
-  const end = new Date(now.getTime() + durationMinutes * 60000).toISOString();
+  // Floored to the minute, like the event the backend is about to create, so
+  // the prediction and its confirmation print the same "free at" time.
+  const endMs = now.getTime() + durationMinutes * 60000;
+  const end = new Date(endMs - (endMs % 60000)).toISOString();
   const event: CalendarEvent = {
     id: `optimistic-${now.getTime()}`,
     title: title?.trim() || 'Walk-in meeting',
@@ -585,6 +647,7 @@ function predictBooked(
     busyUntil: end,
     checkIn: s.settings.checkInEnabled ? { pending: false, confirmed: true, deadline: end } : null,
     freeUntil: null,
+    upcomingConfirmed: false,
     availableMinutes: 0,
     events: [event, ...s.events],
   };
@@ -605,7 +668,7 @@ function predictFreed(s: RoomStatus, now: Date): RoomStatus {
   return {
     ...s,
     now: now.toISOString(),
-    state: 'free',
+    state: freeState(next, now.getTime()),
     current: null,
     next,
     busyUntil: null,

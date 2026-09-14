@@ -61,6 +61,18 @@ export const api = {
       request<RoomStatus>(`/rooms/${id}/end`, { method: 'POST', body: { eventId } }),
     checkIn: (id: string, eventId: string) =>
       request<RoomStatus>(`/rooms/${id}/check-in`, { method: 'POST', body: { eventId } }),
+    /** "I'm already here": presence for a meeting that has not started yet. */
+    checkInEarly: (id: string, eventId: string) =>
+      request<RoomStatus>(`/rooms/${id}/check-in-early`, {
+        method: 'POST',
+        body: { eventId },
+      }),
+    /** Takes that back — the meeting is asked about normally when it starts. */
+    cancelCheckInEarly: (id: string, eventId: string) =>
+      request<RoomStatus>(`/rooms/${id}/check-in-early/cancel`, {
+        method: 'POST',
+        body: { eventId },
+      }),
     release: (id: string, eventId: string) =>
       request<RoomStatus>(`/rooms/${id}/release`, { method: 'POST', body: { eventId } }),
     /** Settings PIN: deletes any of today's meetings; returns the day without it. */

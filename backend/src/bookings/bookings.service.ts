@@ -7,7 +7,13 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { addMinutes, differenceInMinutes, endOfDay, startOfDay } from 'date-fns';
+import {
+  addMinutes,
+  differenceInMinutes,
+  endOfDay,
+  startOfDay,
+  startOfMinute,
+} from 'date-fns';
 import { fromZonedTime, toZonedTime } from 'date-fns-tz';
 import { CalendarChangesService } from '../calendar/calendar-changes.service';
 import { CalendarService } from '../calendar/calendar.service';
@@ -38,6 +44,15 @@ const BACK_TO_BACK_TOLERANCE_MS = 60_000;
 
 /** A start time this close to now is treated as "now" rather than a reservation. */
 const START_NOW_TOLERANCE_MS = 60_000;
+
+/**
+ * A meeting starting within this window makes the room "busy soon" rather than
+ * free: too little time to start anything, and the moment when the people it
+ * was booked for are walking in — so it is also the window in which they may
+ * check in early. Mirrored by BUSY_SOON_MS in the tablet's RoomStore, which
+ * turns the screen over on its own clock.
+ */
+const BUSY_SOON_MS = 5 * 60_000;
 
 /**
  * Today's calendar, split the way the booking logic reads it. A full-day event
@@ -107,8 +122,19 @@ export class BookingsService {
           ),
         );
 
+    // Still free, but not for long enough to matter: the screen says so, and
+    // offers the people the next meeting belongs to a way to check in early.
+    const busySoon =
+      !current && next !== null && toDate(next.start).getTime() - now.getTime() <= BUSY_SOON_MS;
+    const upcomingConfirmed =
+      busySoon && settings.checkInEnabled
+        ? await this.isConfirmed(room.id, next!.id)
+        : false;
+
     const state: RoomStatus['state'] = !current
-      ? 'free'
+      ? busySoon
+        ? 'busy-soon'
+        : 'free'
       : checkIn?.pending
         ? 'awaiting-check-in'
         : 'busy';
@@ -128,6 +154,7 @@ export class BookingsService {
       busyUntil: busyUntil ? busyUntil.toISOString() : null,
       checkIn,
       freeUntil: freeUntil ? freeUntil.toISOString() : null,
+      upcomingConfirmed,
       availableMinutes,
       events: [...allDay, ...timed].filter(
         (e) => toDate(e.end) > now && e.id !== releasedEventId,
@@ -187,7 +214,12 @@ export class BookingsService {
       !scheduled ||
       Math.abs(scheduled.getTime() - now.getTime()) <= START_NOW_TOLERANCE_MS;
     const start = immediate ? now : scheduled;
-    const end = addMinutes(start, dto.durationMinutes);
+    // A walk-in starts at the exact second the tap landed, but every surface —
+    // the tablet, the calendar — prints times to the minute. An end on a ragged
+    // second makes the room screen contradict itself for up to a minute ("12:58,
+    // busy, free at 12:58"), so it is floored to the minute the clock shows. The
+    // meeting still runs its full length from the minute the tap fell in.
+    const end = startOfMinute(addMinutes(start, dto.durationMinutes));
 
     if (immediate) {
       if (status.current) {
@@ -271,6 +303,74 @@ export class BookingsService {
     return this.getStatus(roomId, { fromDevice: true });
   }
 
+  /**
+   * "I'm already here" — presence confirmed for a meeting that has not started
+   * yet. It then opens as busy instead of asking "is this meeting taking
+   * place?", so a room people are already sitting in can never be released out
+   * from under them while they wait for it to begin.
+   */
+  async confirmUpcoming(roomId: string, eventId: string): Promise<RoomStatus> {
+    const room = await this.rooms.findOne(roomId);
+    const settings = await this.settings.get();
+    const now = new Date();
+    const { timed } = await this.todaysEvents(room, now, settings.timezone);
+    const event = timed.find((e) => e.id === eventId);
+    if (!event) throw new BadRequestException("Event not found in today's calendar");
+    const startsIn = toDate(event.start).getTime() - now.getTime();
+    // The meeting started between the tap and this request: it is the running
+    // meeting's own prompt that is being answered, so answer that one.
+    if (startsIn <= 0) return this.confirmPresence(roomId, eventId);
+    if (startsIn > BUSY_SOON_MS) {
+      throw new ConflictException('That meeting is not starting yet');
+    }
+    await this.upsertCheckIn(roomId, event, { confirmedAt: now });
+    this.changes.notify(room.calendarId);
+    this.logger.log(`Checked in early for "${event.title}" in ${room.name}`);
+    return this.getStatus(roomId, { fromDevice: true });
+  }
+
+  /**
+   * Takes back an early "I'm already here" — tapped by mistake, or the people
+   * who said it have left again. The record is dropped rather than marked
+   * unconfirmed, so the meeting starts exactly as it would have: with the
+   * normal presence prompt, on the normal deadline.
+   *
+   * The delete is pinned to the version the row had when it was read, because
+   * this is the one presence write that destroys another's: a status poll that
+   * crosses the meeting's start opens the real prompt on the same row, and a
+   * blind delete would drop it. Pinned, the loser changes nothing and the
+   * tablet is told to look again.
+   */
+  async cancelUpcoming(roomId: string, eventId: string): Promise<RoomStatus> {
+    const room = await this.rooms.findOne(roomId);
+    const settings = await this.settings.get();
+    const now = new Date();
+    const { timed } = await this.todaysEvents(room, now, settings.timezone);
+    const event = timed.find((e) => e.id === eventId);
+    if (!event) throw new BadRequestException("Event not found in today's calendar");
+    if (toDate(event.start) <= now) {
+      throw new ConflictException('That meeting has already started');
+    }
+
+    const record = await this.checkIns.findOne({ where: { roomId, eventId } });
+    // Already gone, or never confirmed in the first place: the screen is a poll
+    // behind, and the status it gets back is the answer.
+    if (!record?.confirmedAt || record.releasedAt) {
+      return this.getStatus(roomId, { fromDevice: true });
+    }
+
+    const { affected } = await this.checkIns.delete({
+      roomId,
+      eventId,
+      version: record.version,
+    });
+    if (!affected) {
+      throw new ConflictException('This check-in has just changed; try again');
+    }
+    this.logger.log(`Early check-in cancelled for "${event.title}" in ${room.name}`);
+    return this.getStatus(roomId, { fromDevice: true });
+  }
+
   /** "No, nobody showed up" — same effect as the timeout. */
   async release(roomId: string, eventId: string): Promise<RoomStatus> {
     const { room, event } = await this.findRunningEvent(roomId, eventId);
@@ -309,7 +409,7 @@ export class BookingsService {
         const before = await this.pendingCheckIn(room.id);
         if (!before) continue;
         const status = await this.getStatus(room.id, { fromDevice: false });
-        if (status.state === 'free') released += 1;
+        if (!status.current) released += 1;
       } catch (err) {
         this.logger.warn(`Auto-release check failed for ${room.name}: ${String(err)}`);
       }
@@ -436,6 +536,12 @@ export class BookingsService {
       dayStart: fromZonedTime(startOfDay(zoned), timezone),
       dayEnd: fromZonedTime(endOfDay(zoned), timezone),
     };
+  }
+
+  /** True when presence for `eventId` has already been confirmed and not undone. */
+  private async isConfirmed(roomId: string, eventId: string): Promise<boolean> {
+    const record = await this.checkIns.findOne({ where: { roomId, eventId } });
+    return Boolean(record?.confirmedAt && !record.releasedAt);
   }
 
   private async pendingCheckIn(roomId: string): Promise<CheckIn | null> {

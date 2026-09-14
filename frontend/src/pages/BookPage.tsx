@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { formatDuration, formatTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
-import type { CalendarEvent } from '@/types';
+import { roomIsFree, type CalendarEvent } from '@/types';
 
 /** One unit on the time picker. Everything on this page counts in these. */
 const UNIT_MINUTES = 5;
@@ -110,7 +110,7 @@ export const BookPage = observer(function BookPage() {
   // and offers the gaps after it, so a busy room is no reason to leave it.
   // Our own booking (optimistic or confirmed) never counts as "taken".
   useEffect(() => {
-    if (!status || status.state === 'free' || mode !== 'quick') return;
+    if (!status || roomIsFree(status.state) || mode !== 'quick') return;
     if (submitted.current || redirected.current) return;
     if (room.busy || room.optimistic) return;
     if (status.current && room.isOwnBooking(status.current.id)) return;
@@ -151,7 +151,9 @@ export const BookPage = observer(function BookPage() {
 
   // Nothing to book "now" while a meeting is running, so the way over to the
   // quick view is not offered then.
-  const canBookNow = status?.state === 'free';
+  // "Busy soon" counts: the room really is free, and availableMinutes already
+  // caps what can be taken before the meeting that is about to start.
+  const canBookNow = status !== null && roomIsFree(status.state);
   /** On the time picker of a busy room: when the first gap can open. */
   const busyHint =
     !canBookNow && room.busyUntil ? `Busy until ${formatTime(room.busyUntil, tz)} · ` : '';

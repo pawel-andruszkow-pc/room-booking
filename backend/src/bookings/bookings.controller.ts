@@ -74,6 +74,23 @@ export class BookingsController {
     return this.bookings.confirmPresence(roomId, dto.eventId);
   }
 
+  /** "I'm already here" — presence for a meeting that is about to start. */
+  @Post('check-in-early')
+  @HttpCode(200)
+  checkInEarly(@Param('roomId', ParseUUIDPipe) roomId: string, @Body() dto: EventActionDto) {
+    return this.bookings.confirmUpcoming(roomId, dto.eventId);
+  }
+
+  /** Takes that back: the meeting goes back to being asked about when it starts. */
+  @Post('check-in-early/cancel')
+  @HttpCode(200)
+  cancelCheckInEarly(
+    @Param('roomId', ParseUUIDPipe) roomId: string,
+    @Body() dto: EventActionDto,
+  ) {
+    return this.bookings.cancelUpcoming(roomId, dto.eventId);
+  }
+
   @Post('release')
   @HttpCode(200)
   release(@Param('roomId', ParseUUIDPipe) roomId: string, @Body() dto: EventActionDto) {

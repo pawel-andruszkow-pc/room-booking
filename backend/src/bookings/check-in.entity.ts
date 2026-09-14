@@ -4,6 +4,7 @@ import {
   Entity,
   PrimaryGeneratedColumn,
   Unique,
+  VersionColumn,
 } from 'typeorm';
 
 /**
@@ -36,4 +37,13 @@ export class CheckIn {
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
+
+  /**
+   * Bumped by TypeORM on every write. Callers that need to act on the row they
+   * last read pin it (see BookingsService.cancelUpcoming): the statement is
+   * scoped to this value, so a write that raced them changes nothing instead of
+   * quietly overwriting their answer.
+   */
+  @VersionColumn()
+  version: number;
 }
