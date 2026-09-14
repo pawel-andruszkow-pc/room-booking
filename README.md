@@ -18,7 +18,7 @@ on the spot, end a meeting early, or confirm they actually showed up.
 | **Today** | Ghost button in the corner opens a whole-day view: a vertical time scale (full hours as the main unit, half hours secondary) with each meeting drawn as a rectangle the length of its slot, past ones dimmed and a “now” marker across the current one. |
 | **Book** | Two sections side by side: **Book this room now** (15 min – 2 h presets plus a slider, only durations that fit before the next meeting) and **Reserve for later today** (pick the hour, the quarter past it and a length; slots that clash with an existing meeting are disabled). A reservation is *not* checked in on booking, so the presence prompt still releases it if nobody turns up. |
 | **End meeting** | Two-step inline confirmation; shortens the calendar event to *now*. |
-| **Presence check** | When a meeting starts the tablet asks “Is this meeting taking place?”. If nobody taps **Yes** within 15 min (configurable) the room is released — on the tablet, and by a server cron job as a safety net. |
+| **Presence check** | When a meeting starts the tablet asks “Is this meeting taking place?”. If nobody taps **Yes** within 10 min (configurable) the room is released — on the tablet, and by a server cron job as a safety net. |
 | **Settings** (PIN) | Assign this device to a room, name it, switch on **kiosk mode** (fullscreen, wake lock, no cursor). Tap the clock 5× to reach it from kiosk mode. |
 | **Admin** (PIN) | Rooms CRUD with calendar-connection test, one-tap import of Google Workspace room resources, device overview, PIN & behaviour settings. |
 | **Login** | HTTP Basic credentials, entered once per device and stored locally; every API call carries them. |

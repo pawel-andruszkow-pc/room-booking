@@ -19,7 +19,7 @@ export class AppSettings {
   checkInEnabled: boolean;
 
   /** Minutes after the meeting start before an unconfirmed room is released. */
-  @Column({ type: 'int', default: 15 })
+  @Column({ type: 'int', default: 10 })
   checkInMinutes: number;
 
   /** IANA timezone used for day boundaries. */

@@ -67,12 +67,6 @@ const pairClass = 'flex w-full gap-[clamp(0.75rem,1.2vw,1.25rem)]';
 const pairButtonClass =
   'min-w-0 flex-1 px-[clamp(1rem,2.4vw,3rem)] text-[clamp(1.25rem,1.7vw,1.875rem)]';
 
-/**
- * Below this many minutes the countdown to the next meeting turns orange, so a
- * glance from the corridor shows the room is about to be taken.
- */
-const MEETING_SOON_MINUTES = 15;
-
 /** Footer action panel. Instant on this tablet's own taps, like the headline. */
 const panelMotion = (instant: boolean) => ({
   initial: instant ? { opacity: 1, y: 0 } : { opacity: 0, y: 24 },
@@ -241,14 +235,6 @@ export const RoomPage = observer(function RoomPage() {
                     label="Next meeting"
                     value={formatDuration(room.minutesUntilNext ?? 0)}
                     at={formatTime(room.next.start, tz)}
-                    // Warm yellow reads as "about to change" against the green
-                    // screen, and keeps its distance from it in luminance —
-                    // a mid-tone orange sits at almost the same brightness as
-                    // the background and goes muddy from down the corridor.
-                    valueClassName={cn(
-                      (room.minutesUntilNext ?? Infinity) < MEETING_SOON_MINUTES &&
-                        'text-[#ffd230]',
-                    )}
                   />
                 ) : (
                   // Same two columns with nothing to count down to, so the
@@ -437,7 +423,7 @@ function DetailPanel({
   at?: string;
   /** Small trailing line, e.g. the meeting that follows without a break. */
   note?: string;
-  /** Extra classes for the figure, e.g. the orange "meeting soon" colour. */
+  /** Extra classes for the figure, e.g. a smaller size for a longer value. */
   valueClassName?: string;
 }) {
   return (
@@ -449,7 +435,7 @@ function DetailPanel({
         </div>
         <div
           className={cn(
-            'mt-[clamp(0.75rem,1.2vw,1.5rem)] text-[clamp(3.25rem,5.8vw,6.5rem)] font-extrabold leading-none tracking-tight transition-colors duration-500',
+            'mt-[clamp(0.75rem,1.2vw,1.5rem)] text-[clamp(3.25rem,5.8vw,6.5rem)] font-extrabold leading-none tracking-tight',
             valueClassName,
           )}
         >

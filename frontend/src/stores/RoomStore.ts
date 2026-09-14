@@ -9,6 +9,11 @@ import type { ClockStore } from './ClockStore';
  * server-configured interval, re-fetches immediately at event boundaries
  * (meeting starts / ends, check-in deadline) and after every user action.
  *
+ * The screen does not wait for those re-fetches to turn over: every status
+ * carries the room's remaining events, so the tablet re-derives the state from
+ * them as the clock crosses a boundary (see `projectStatus`). A meeting that
+ * starts at 10:00 shows as busy at 10:00, not a round-trip later.
+ *
  * User actions are **optimistic**: the predicted status is applied to the UI
  * the moment the button is tapped, the server response then replaces it, and
  * a failure rolls back to the previous status. A version counter makes sure a
@@ -176,15 +181,18 @@ export class RoomStore {
     void this.refresh();
     this.openStream(roomId);
 
-    // Refresh the instant a meeting starts/ends or a deadline passes.
+    // The instant a meeting starts/ends or a deadline passes: turn the screen
+    // over from the events already on hand, then ask the server to confirm it.
     this.disposers.push(
       reaction(
         () => {
           const boundary = this.nextBoundary;
-          return boundary !== null && this.clock.now.getTime() >= boundary + 500;
+          return boundary !== null && this.clock.now.getTime() >= boundary;
         },
         (crossed) => {
-          if (crossed) void this.refresh();
+          if (!crossed) return;
+          this.project();
+          void this.refresh();
         },
       ),
     );
@@ -363,16 +371,41 @@ export class RoomStore {
     }
   }
 
-  private applyStatus(status: RoomStatus, source: 'user' | 'remote' = 'remote') {
+  /**
+   * Moves the shown status on to what the clock alone already implies. Called
+   * at every boundary, so the state word changes with the minute rather than
+   * with the network.
+   */
+  private project(): void {
+    const status = this.status;
+    // A tap is in flight: its own prediction is on screen and its response is
+    // the truth, so there is nothing to reason about here.
+    if (!status || this.optimistic) return;
+    const projected = projectStatus(status, this.clock.now);
+    if (projected === status) return;
     runInAction(() => {
-      this.status = status;
+      this.status = projected;
+      // The clock moved this, not the person in front of the tablet, so the
+      // free/busy change gets its animation.
+      this.changedByUser = false;
+    });
+  }
+
+  private applyStatus(status: RoomStatus, source: 'user' | 'remote' = 'remote') {
+    // Sync first so the projection below reasons with the corrected clock.
+    this.clock.syncWith(status.now);
+    runInAction(() => {
+      // A response describes the room as it was when the server read the
+      // calendar. If a boundary has passed since (a slow round-trip, or a
+      // tablet clock running ahead of the server's), carry it forward rather
+      // than letting a stale snapshot flip the screen back for a second.
+      this.status = projectStatus(status, this.clock.now);
       this.optimistic = false;
       this.changedByUser = source === 'user';
       this.error = null;
       this.loading = false;
       this.lastUpdated = new Date();
     });
-    this.clock.syncWith(status.now);
   }
 
   private schedulePoll() {
@@ -414,6 +447,115 @@ export class RoomStore {
 // Pure functions from the current status to the status we expect the server
 // to return. They only need to be right about what the UI shows next; the real
 // response replaces them within a round-trip.
+
+/** Meetings starting this close to the previous end count as back-to-back. */
+const BACK_TO_BACK_TOLERANCE_MS = 60_000;
+
+/**
+ * Re-derives the status from the events it already carries, as of `at`.
+ *
+ * The backend owns the state, but it only works it out when asked, so between
+ * a meeting's start and the answer to the refresh that start triggered the
+ * screen would still read "Free". Every status ships the room's remaining
+ * events, which is all `BookingsService.getStatus` reasons over too, so the
+ * tablet can reach the same conclusion on its own the second the clock crosses
+ * the boundary — and the server confirms it a round-trip later.
+ *
+ * Two things it cannot know are left to the backend: the end of the calendar
+ * day (only needed when nothing is booked after the current meeting), and the
+ * check-in records — an expired presence prompt is the server's to resolve,
+ * because releasing the room also shortens the event in the calendar.
+ *
+ * Returns `s` unchanged when nothing has moved, so it is safe to call often.
+ */
+function projectStatus(s: RoomStatus, now: Date): RoomStatus {
+  // Never reason about a moment before the server read the calendar: the
+  // tablet's clock may sit behind it, within ClockStore's sync tolerance.
+  const at = Math.max(now.getTime(), new Date(s.now).getTime());
+  const startsAt = (e: CalendarEvent) => new Date(e.start).getTime();
+  const endsAt = (e: CalendarEvent) => new Date(e.end).getTime();
+
+  // Anything that has ended drops out, exactly as the server's list does. The
+  // status keeps the day's full-day reservations ahead of the timed meetings,
+  // and filtering preserves that order.
+  const events = s.events.filter((e) => endsAt(e) > at);
+  const allDay = events.filter((e) => e.isAllDay);
+  const timed = events.filter((e) => !e.isAllDay);
+
+  // A full-day reservation owns the room whatever else is in the calendar, and
+  // only timed meetings are ever "next" (see BookingsService.getStatus).
+  const current =
+    allDay[0] ?? timed.find((e) => startsAt(e) <= at && endsAt(e) > at) ?? null;
+  const next = timed.find((e) => startsAt(e) > at) ?? null;
+  // Nothing has moved — not the state, and not the day's remaining events,
+  // which the booking screen lays the time picker out from.
+  const same = (a: CalendarEvent | null, b: CalendarEvent | null) =>
+    (a?.id ?? null) === (b?.id ?? null);
+  if (
+    events.length === s.events.length &&
+    same(current, s.current) &&
+    same(next, s.next)
+  ) {
+    return s;
+  }
+
+  let busyUntil: number | null = null;
+  if (current) {
+    // End of the chain of meetings that follow each other without a gap.
+    busyUntil = endsAt(current);
+    for (const event of timed) {
+      if (startsAt(event) > busyUntil + BACK_TO_BACK_TOLERANCE_MS) break;
+      if (endsAt(event) > busyUntil) busyUntil = endsAt(event);
+    }
+  }
+
+  const checkIn = projectCheckIn(s, current, at);
+  const state: RoomState = !current ? 'free' : checkIn?.pending ? 'awaiting-check-in' : 'busy';
+
+  // With no meeting left today the day's end is unknown here; `predictFreed`
+  // makes the same call, and the server response fills it in.
+  const freeUntil = current ? null : next ? next.start : s.current ? null : s.freeUntil;
+  const cap = s.settings.maxBookingMinutes;
+  const availableMinutes = current
+    ? 0
+    : freeUntil
+      ? Math.max(0, Math.min(cap ?? Infinity, minutesBetween(new Date(at), freeUntil)))
+      : (cap ?? 24 * 60);
+
+  return {
+    ...s,
+    now: new Date(at).toISOString(),
+    state,
+    current,
+    next,
+    busyUntil: busyUntil === null ? null : new Date(busyUntil).toISOString(),
+    checkIn,
+    freeUntil,
+    availableMinutes,
+    events,
+  };
+}
+
+/**
+ * The prompt for a meeting that has just started. The server keeps the record
+ * (and the answer the room gave), so its version is kept for the meeting that
+ * was already running; a newly started one gets the prompt the backend is
+ * about to open — or none, when the tablet has already missed the deadline,
+ * which the backend reads as "nobody was here to ask, assume it is on".
+ */
+function projectCheckIn(s: RoomStatus, current: CalendarEvent | null, at: number) {
+  // Nobody is expected to "show up" for a day-long block, so it is never asked
+  // about — the backend skips the prompt for it too.
+  if (!current || current.isAllDay) return null;
+  if (current.id === s.current?.id) return s.checkIn;
+  if (!s.settings.checkInEnabled) return null;
+  const deadline = new Date(current.start).getTime() + s.settings.checkInMinutes * 60_000;
+  return {
+    pending: at <= deadline,
+    confirmed: at > deadline,
+    deadline: new Date(deadline).toISOString(),
+  };
+}
 
 function predictBooked(
   s: RoomStatus,

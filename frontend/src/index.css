@@ -53,6 +53,26 @@
     text-rendering: optimizeLegibility;
   }
 
+  /* This is a wall tablet, not a document: nothing on screen is text to copy,
+     and a stray long-press that selects a headline (or pops up the system
+     "Copy / Share" menu) only gets in the way of the next tap. Fields people
+     type into are the exception below. */
+  *,
+  *::before,
+  *::after {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  input,
+  textarea,
+  [contenteditable='true'] {
+    user-select: text;
+    -webkit-user-select: text;
+    -webkit-touch-callout: default;
+  }
+
   ::selection {
     background: rgba(255, 255, 255, 0.25);
   }
@@ -62,13 +82,10 @@
     touch-action: manipulation;
   }
 
-  /* Kiosk mode: no cursor, no text selection, no long-press menus. */
+  /* Kiosk mode also hides the cursor. */
   .kiosk,
   .kiosk * {
     cursor: none !important;
-    user-select: none;
-    -webkit-user-select: none;
-    -webkit-touch-callout: none;
   }
 
   @media (prefers-reduced-motion: reduce) {
