@@ -13,6 +13,7 @@ import {
   endOfDay,
   startOfDay,
   startOfMinute,
+  subMinutes,
 } from 'date-fns';
 import { fromZonedTime, toZonedTime } from 'date-fns-tz';
 import { CalendarChangesService } from '../calendar/calendar-changes.service';
@@ -54,6 +55,17 @@ const START_NOW_TOLERANCE_MS = 60_000;
  * turns the screen over on its own clock.
  */
 const BUSY_SOON_MS = 5 * 60_000;
+
+/**
+ * How long past its deadline an unanswered presence prompt is still worth
+ * chasing. The job behind it runs every minute, so a record still pending this
+ * much later is not one a release can fix: the meeting it belongs to ended, or
+ * left the calendar, before anybody answered. Such a record stays pending for
+ * good — and unbounded, each one would send the job back to the calendar every
+ * minute for the rest of the day. A tablet that is still polling releases a
+ * meeting genuinely running on its own, without going through this.
+ */
+const RELEASE_GRACE_MINUTES = 15;
 
 /**
  * Today's calendar, split the way the booking logic reads it. A full-day event
@@ -468,16 +480,30 @@ export class BookingsService {
     return this.getDay(roomId);
   }
 
-  /** Releases every pending check-in whose deadline passed. Called by the cron job. */
+  /**
+   * Releases every pending check-in whose deadline passed. Called by the cron
+   * job, which logs the number returned — so it counts records this actually
+   * released, read back from the record itself. Asking whether the room ended
+   * up without a current meeting instead would count a room that is simply
+   * free, every minute, for as long as one stale record sits in the table.
+   */
   async releaseExpired(): Promise<number> {
     const rooms = await this.rooms.findAll();
+    const settings = await this.settings.get();
+    const notBefore = subMinutes(
+      new Date(),
+      settings.checkInMinutes + RELEASE_GRACE_MINUTES,
+    );
     let released = 0;
     for (const room of rooms) {
       try {
-        const before = await this.pendingCheckIn(room.id);
-        if (!before) continue;
-        const status = await this.getStatus(room.id, { fromDevice: false });
-        if (!status.current) released += 1;
+        const pending = await this.pendingCheckIn(room.id, notBefore);
+        if (!pending) continue;
+        // Reading the status is what releases it: an expired prompt on a
+        // meeting that is still running frees the room as a side effect.
+        await this.getStatus(room.id, { fromDevice: false });
+        const after = await this.checkIns.findOne({ where: { id: pending.id } });
+        if (after?.releasedAt) released += 1;
       } catch (err) {
         this.logger.warn(`Auto-release check failed for ${room.name}: ${String(err)}`);
       }
@@ -612,12 +638,18 @@ export class BookingsService {
     return Boolean(record?.confirmedAt && !record.releasedAt);
   }
 
-  private async pendingCheckIn(roomId: string): Promise<CheckIn | null> {
+  /**
+   * An unanswered presence prompt that a release could still act on: one whose
+   * meeting began recently enough to plausibly still be running (see
+   * {@link RELEASE_GRACE_MINUTES}).
+   */
+  private async pendingCheckIn(roomId: string, notBefore: Date): Promise<CheckIn | null> {
     return this.checkIns
       .createQueryBuilder('c')
       .where('c.roomId = :roomId', { roomId })
       .andWhere('c.confirmedAt IS NULL')
       .andWhere('c.releasedAt IS NULL')
+      .andWhere('c.eventStartsAt > :notBefore', { notBefore })
       .getOne();
   }
 
