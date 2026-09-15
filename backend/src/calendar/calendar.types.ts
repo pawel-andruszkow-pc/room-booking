@@ -43,6 +43,17 @@ export interface CalendarSummary {
   canWrite: boolean;
 }
 
+/** How {@link CalendarProvider.updateEventEnd} should behave when it may not edit. */
+export interface UpdateEndOptions {
+  /**
+   * Whether a provider that cannot edit the event may make the room decline it
+   * instead. Declining frees the room, which is exactly what shortening wants
+   * (default) and the opposite of what extending wants — so the extend path
+   * turns it off and takes the provider's error instead.
+   */
+  declineIfForbidden?: boolean;
+}
+
 /**
  * Contract every calendar backend implements. Kept deliberately small — the
  * booking logic only ever needs today's events plus create / shorten / delete.
@@ -60,11 +71,18 @@ export interface CalendarProvider {
   listEvents(calendarId: string, from: Date, to: Date): Promise<CalendarEvent[]>;
   createEvent(calendarId: string, input: CreateEventInput): Promise<CalendarEvent>;
   /**
-   * Ends the event at `end`. Providers that cannot edit foreign events (a
-   * Workspace resource calendar holding a copy of someone else's meeting) may
-   * instead make the room decline the event, which frees the room just the same.
+   * Moves the event's end to `end` — earlier to free the room, later to extend
+   * the meeting. Providers that cannot edit foreign events (a Workspace
+   * resource calendar holding a copy of someone else's meeting) may instead
+   * make the room decline the event, which frees the room just the same;
+   * `opts.declineIfForbidden: false` forbids that and surfaces the error.
    */
-  updateEventEnd(calendarId: string, eventId: string, end: Date): Promise<void>;
+  updateEventEnd(
+    calendarId: string,
+    eventId: string,
+    end: Date,
+    opts?: UpdateEndOptions,
+  ): Promise<void>;
   deleteEvent(calendarId: string, eventId: string): Promise<void>;
   testConnection(calendarId: string): Promise<ConnectionTestResult>;
 }

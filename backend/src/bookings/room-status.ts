@@ -59,6 +59,14 @@ export interface RoomStatus {
   upcomingConfirmed: boolean;
   /** Longest ad-hoc booking that fits right now (0 while busy). */
   availableMinutes: number;
+  /**
+   * How much longer the running meeting may run: the gap between its end and
+   * the next meeting (or the end of the day), capped like any other booking.
+   * 0 while the room is free, for a full-day reservation, and whenever another
+   * meeting starts the moment this one ends — which is when the tablet hides
+   * "Extend reservation".
+   */
+  extendableMinutes: number;
   /** Remaining events today, including the current one; a full-day reservation comes first. */
   events: CalendarEvent[];
   settings: {

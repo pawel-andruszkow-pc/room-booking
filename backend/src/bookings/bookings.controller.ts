@@ -16,6 +16,7 @@ import { BookingsService } from './bookings.service';
 import { RoomStreamService } from './room-stream.service';
 import { BookRoomDto } from './dto/book-room.dto';
 import { EventActionDto } from './dto/event-action.dto';
+import { ExtendMeetingDto } from './dto/extend-meeting.dto';
 
 /**
  * Room-centric booking endpoints used by the tablet. Every mutation returns the
@@ -66,6 +67,13 @@ export class BookingsController {
   @HttpCode(200)
   end(@Param('roomId', ParseUUIDPipe) roomId: string, @Body() dto: EventActionDto) {
     return this.bookings.endMeeting(roomId, dto.eventId);
+  }
+
+  /** "Extend reservation": the running meeting runs on into the gap after it. */
+  @Post('extend')
+  @HttpCode(200)
+  extend(@Param('roomId', ParseUUIDPipe) roomId: string, @Body() dto: ExtendMeetingDto) {
+    return this.bookings.extendMeeting(roomId, dto.eventId, dto.minutes);
   }
 
   @Post('check-in')

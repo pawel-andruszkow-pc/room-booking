@@ -76,6 +76,8 @@ export interface RoomStatus {
   /** Somebody already said "I'm already here" for `next`; only set while `busy-soon`. */
   upcomingConfirmed: boolean;
   availableMinutes: number;
+  /** How much longer the running meeting may run before the next one; 0 while free. */
+  extendableMinutes: number;
   events: CalendarEvent[];
   settings: {
     checkInEnabled: boolean;

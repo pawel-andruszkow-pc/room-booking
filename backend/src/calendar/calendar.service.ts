@@ -6,6 +6,7 @@ import {
   CalendarSummary,
   ConnectionTestResult,
   CreateEventInput,
+  UpdateEndOptions,
 } from './calendar.types';
 
 /** Thin facade over the configured provider so feature modules never import a concrete one. */
@@ -33,8 +34,13 @@ export class CalendarService implements CalendarProvider {
     return this.provider.createEvent(calendarId, input);
   }
 
-  updateEventEnd(calendarId: string, eventId: string, end: Date): Promise<void> {
-    return this.provider.updateEventEnd(calendarId, eventId, end);
+  updateEventEnd(
+    calendarId: string,
+    eventId: string,
+    end: Date,
+    opts?: UpdateEndOptions,
+  ): Promise<void> {
+    return this.provider.updateEventEnd(calendarId, eventId, end, opts);
   }
 
   deleteEvent(calendarId: string, eventId: string): Promise<void> {

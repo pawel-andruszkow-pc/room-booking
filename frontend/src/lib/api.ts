@@ -57,6 +57,12 @@ export const api = {
         method: 'POST',
         body: { startsAt, durationMinutes, title: title || undefined },
       }),
+    /** "Extend reservation": the running meeting runs `minutes` longer. */
+    extend: (id: string, eventId: string, minutes: number) =>
+      request<RoomStatus>(`/rooms/${id}/extend`, {
+        method: 'POST',
+        body: { eventId, minutes },
+      }),
     end: (id: string, eventId: string) =>
       request<RoomStatus>(`/rooms/${id}/end`, { method: 'POST', body: { eventId } }),
     checkIn: (id: string, eventId: string) =>

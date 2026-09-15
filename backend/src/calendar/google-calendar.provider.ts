@@ -14,6 +14,7 @@ import {
   ConnectionTestResult,
   CreateEventInput,
   parseCapacity,
+  UpdateEndOptions,
 } from './calendar.types';
 
 export interface WatchChannelInput {
@@ -167,7 +168,12 @@ export class GoogleCalendarProvider implements CalendarProvider {
    * delegated writer) change times on foreign events; when that is refused the
    * room declines the event instead, which also frees it.
    */
-  async updateEventEnd(calendarId: string, eventId: string, end: Date): Promise<void> {
+  async updateEventEnd(
+    calendarId: string,
+    eventId: string,
+    end: Date,
+    opts: UpdateEndOptions = {},
+  ): Promise<void> {
     try {
       await this.api().events.patch({
         calendarId,
@@ -175,7 +181,9 @@ export class GoogleCalendarProvider implements CalendarProvider {
         requestBody: { end: { dateTime: end.toISOString() } },
       });
     } catch (err) {
-      if (!isForbidden(err)) throw err;
+      // Declining is a way of *ending* a meeting the room may not edit; when
+      // the caller is extending one there is no equivalent, so the 403 stands.
+      if (!isForbidden(err) || opts.declineIfForbidden === false) throw err;
       this.logger.warn(
         `Cannot edit ${eventId} on ${calendarId}; declining as the room instead`,
       );

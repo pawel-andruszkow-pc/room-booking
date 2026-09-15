@@ -20,7 +20,7 @@ import { useSecretTap } from '@/hooks/useSecretTap';
 import { Button } from '@/components/ui/button';
 import { Clock } from '@/components/Clock';
 import { Spinner } from '@/components/ui/spinner';
-import { formatCountdown, formatDuration, formatTime } from '@/lib/time';
+import { formatCountdown, formatCountdownMinutes, formatTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { roomIsFree } from '@/types';
 
@@ -71,10 +71,15 @@ const panelLabelClass =
 const checkInButtonClass =
   'w-full h-[clamp(3.75rem,5.25vw,5.75rem)] gap-[clamp(0.625rem,0.9vw,1rem)] px-[clamp(1rem,1.6vw,2rem)] text-[clamp(1.25rem,1.7vw,1.875rem)]';
 
-/** Two buttons side by side must share the left column at any width. */
+/**
+ * Two buttons side by side must share the left column at any width. Half of
+ * that column is not much for a label like "Extend reservation", so the pair
+ * runs tighter padding and a smaller floor on the type than a button standing
+ * on its own: at tablet widths the words fit, rather than ending in an ellipsis.
+ */
 const pairClass = 'flex w-full gap-[clamp(0.75rem,1.2vw,1.25rem)]';
 const pairButtonClass =
-  'min-w-0 flex-1 px-[clamp(1rem,2.4vw,3rem)] text-[clamp(1.25rem,1.7vw,1.875rem)]';
+  'min-w-0 flex-1 gap-[clamp(0.5rem,0.8vw,0.75rem)] px-[clamp(0.875rem,1.6vw,2.5rem)] text-[clamp(1.125rem,1.6vw,1.875rem)]';
 
 /** Footer action panel. Instant on this tablet's own taps, like the headline. */
 const panelMotion = (instant: boolean) => ({
@@ -242,7 +247,7 @@ export const RoomPage = observer(function RoomPage() {
                   <DetailPanel
                     icon={CalendarClock}
                     label="Next meeting"
-                    value={formatDuration(room.minutesUntilNext ?? 0)}
+                    {...countdownValue(room.minutesUntilNext ?? 0)}
                     at={formatTime(room.next.start, tz)}
                   />
                 ) : (
@@ -276,7 +281,7 @@ export const RoomPage = observer(function RoomPage() {
                 <DetailPanel
                   icon={CalendarClock}
                   label="Starts in"
-                  value={formatDuration(room.minutesUntilNext ?? 0)}
+                  {...countdownValue(room.minutesUntilNext ?? 0)}
                   at={formatTime(room.next.start, tz)}
                 />
               </motion.div>
@@ -333,7 +338,7 @@ export const RoomPage = observer(function RoomPage() {
                 <DetailPanel
                   icon={Timer}
                   label="Free in"
-                  value={formatDuration(room.minutesUntilFree ?? 0)}
+                  {...countdownValue(room.minutesUntilFree ?? 0)}
                   at={formatTime(room.busyUntil ?? room.current.end, tz)}
                   note={
                     room.followingMeeting
@@ -471,7 +476,7 @@ export const RoomPage = observer(function RoomPage() {
                     setConfirmFree(false);
                     act(room.endMeeting);
                   }}
-                  onBookLater={() => navigate('/book?when=later')}
+                  onExtend={room.canExtend ? () => navigate('/book?when=extend') : null}
                 />
               </motion.div>
             )}
@@ -545,6 +550,19 @@ function BusyHeadline({ instant, title }: { instant: boolean; title?: string }) 
 }
 
 /**
+ * The countdown figure for {@link DetailPanel}, with the size it needs. Under a
+ * minute there is no number left to print, and the words that replace it do not
+ * fit at the figure's size — so they step down a notch, like the full-day
+ * reservation's label does.
+ */
+function countdownValue(minutes: number): { value: string; valueClassName?: string } {
+  const value = formatCountdownMinutes(minutes);
+  return minutes <= 0
+    ? { value, valueClassName: 'text-[clamp(2.5rem,4.4vw,5rem)] leading-[1.05]' }
+    : { value };
+}
+
+/**
  * Right-hand column of the split states: a small label, the figure that matters
  * (minutes until the room changes state) and the clock time it happens at.
  */
@@ -608,27 +626,34 @@ const CountdownLabel = observer(function CountdownLabel() {
 });
 
 /**
- * Footer of a busy room: "Free up the room" and, beside it, a way to reserve
- * a slot after this meeting without freeing anything. A tap on the first one
- * swaps the pair for its confirmation, so the row keeps its shape: the parent
- * dims the screen and shows the "Free up the room?" title while `confirming`.
+ * Footer of a busy room: "Free up the room" and, beside it, a way to keep the
+ * room past the meeting's end. A tap on the first one swaps the pair for its
+ * confirmation, so the row keeps its shape: the parent dims the screen and
+ * shows the "Free up the room?" title while `confirming`.
  *
  * The label says what the tap does to the room, not to the meeting: "End
  * meeting" read as if it would cancel the meeting itself for everyone, which
  * is exactly what someone standing in front of a booked room does not want.
+ *
+ * `onExtend` is null when there is nothing to extend into — the next meeting
+ * starts as this one ends, or the gap is shorter than the shortest slot on
+ * offer. "Free up the room" then stands on its own, but keeps the half of the
+ * row it has beside a second button: this screen redraws itself as meetings
+ * come and go, and a button that changes size under the same label reads as a
+ * different button.
  */
 function BusyActions({
   confirming,
   disabled,
   onConfirmingChange,
   onConfirm,
-  onBookLater,
+  onExtend,
 }: {
   confirming: boolean;
   disabled: boolean;
   onConfirmingChange: (value: boolean) => void;
   onConfirm: () => void;
-  onBookLater: () => void;
+  onExtend: (() => void) | null;
 }) {
   if (!confirming) {
     return (
@@ -645,10 +670,16 @@ function BusyActions({
         >
           <span className="truncate">Free up the room</span>
         </Button>
-        <Button size="xl" variant="outline" className={pairButtonClass} onClick={onBookLater}>
-          <CalendarPlus className="h-[1.2em] w-[1.2em] shrink-0" />
-          <span className="truncate">Book for later</span>
-        </Button>
+        {onExtend ? (
+          <Button size="xl" variant="outline" className={pairButtonClass} onClick={onExtend}>
+            <CalendarPlus className="h-[1.2em] w-[1.2em] shrink-0" />
+            <span className="truncate">Extend reservation</span>
+          </Button>
+        ) : (
+          // Holds the other half of the row open, so the button beside it is
+          // the same size with or without something to extend into.
+          <div className="min-w-0 flex-1" aria-hidden />
+        )}
       </div>
     );
   }

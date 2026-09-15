@@ -45,6 +45,7 @@ const BACK_TO_BACK_TOLERANCE_MS = 60_000;
 /** A start time this close to now is treated as "now" rather than a reservation. */
 const START_NOW_TOLERANCE_MS = 60_000;
 
+
 /**
  * A meeting starting within this window makes the room "busy soon" rather than
  * free: too little time to start anything, and the moment when the people it
@@ -122,6 +123,24 @@ export class BookingsService {
           ),
         );
 
+    // How much longer the running meeting could run before it would collide
+    // with the next one (or run past the end of the day), capped like any
+    // other booking made here. Zero when another meeting starts the moment
+    // this one ends, which is what hides "Extend reservation" on the tablet.
+    const extendableMinutes =
+      current && !current.isAllDay
+        ? Math.max(
+            0,
+            Math.min(
+              settings.maxBookingMinutes ?? Infinity,
+              differenceInMinutes(
+                next ? toDate(next.start) : dayEnd,
+                toDate(current.end),
+              ),
+            ),
+          )
+        : 0;
+
     // Still free, but not for long enough to matter: the screen says so, and
     // offers the people the next meeting belongs to a way to check in early.
     const busySoon =
@@ -156,6 +175,7 @@ export class BookingsService {
       freeUntil: freeUntil ? freeUntil.toISOString() : null,
       upcomingConfirmed,
       availableMinutes,
+      extendableMinutes,
       events: [...allDay, ...timed].filter(
         (e) => toDate(e.end) > now && e.id !== releasedEventId,
       ),
@@ -285,6 +305,54 @@ export class BookingsService {
     if (clash) {
       throw new ConflictException(`Overlaps "${clash.title}"`);
     }
+  }
+
+  /**
+   * "Extend reservation": pushes the running meeting's end back by `minutes`.
+   *
+   * The room can only give away time it still has, so the extension has to fit
+   * in the gap before the next meeting and within the configured maximum —
+   * `extendableMinutes`, which is what the tablet offers as slots. It is
+   * re-checked here because that gap may have been taken while the screen was
+   * showing it.
+   *
+   * Whoever is standing at the tablet asking for more time is plainly in the
+   * room, so this also answers the presence prompt, the way a walk-in booking
+   * does.
+   */
+  async extendMeeting(
+    roomId: string,
+    eventId: string,
+    minutes: number,
+  ): Promise<RoomStatus> {
+    const status = await this.getStatus(roomId, { fromDevice: true });
+    const current = status.current;
+    if (!current || current.id !== eventId) {
+      throw new ConflictException('That meeting is not running right now');
+    }
+    if (current.isAllDay) {
+      throw new ConflictException('A full-day reservation cannot be extended');
+    }
+    if (minutes > status.extendableMinutes) {
+      throw new ConflictException(
+        status.extendableMinutes > 0
+          ? `This meeting can only be extended by ${status.extendableMinutes} minutes`
+          : 'Another meeting starts right after this one',
+      );
+    }
+
+    const end = startOfMinute(addMinutes(toDate(current.end), minutes));
+    // Never as a decline: on a calendar the room may not edit, "free the room"
+    // is not an acceptable stand-in for "hold it longer".
+    await this.calendar.updateEventEnd(status.room.calendarId, current.id, end, {
+      declineIfForbidden: false,
+    });
+    await this.upsertCheckIn(roomId, current, { confirmedAt: new Date() });
+    this.changes.notify(status.room.calendarId);
+    this.logger.log(
+      `Extended "${current.title}" in ${status.room.name} by ${minutes} min`,
+    );
+    return this.getStatus(roomId, { fromDevice: true });
   }
 
   /** "End meeting": shortens the running event so the room frees up immediately. */

@@ -1,6 +1,7 @@
 import { makeAutoObservable, reaction, runInAction } from 'mobx';
 import { api } from '@/lib/api';
-import { minutesBetween } from '@/lib/time';
+import { MIN_EXTEND_MINUTES } from '@/lib/booking';
+import { minutesBetween, minutesUntil } from '@/lib/time';
 import type { CalendarEvent, RoomState, RoomStatus } from '@/types';
 import type { ClockStore } from './ClockStore';
 
@@ -103,13 +104,13 @@ export class RoomStore {
   get minutesUntilNext(): number | null {
     void this.clock.minute;
     if (!this.next) return null;
-    return minutesBetween(this.clock.now, this.next.start);
+    return minutesUntil(this.clock.now, this.next.start);
   }
 
   get minutesUntilCurrentEnds(): number | null {
     void this.clock.minute;
     if (!this.current) return null;
-    return minutesBetween(this.clock.now, this.current.end);
+    return minutesUntil(this.clock.now, this.current.end);
   }
 
   /** When the room is really free again: end of the whole back-to-back block. */
@@ -121,12 +122,32 @@ export class RoomStore {
     void this.clock.minute;
     const until = this.busyUntil;
     if (!until) return null;
-    return minutesBetween(this.clock.now, until);
+    return minutesUntil(this.clock.now, until);
   }
 
   /** True once "I'm already here" has been answered for the meeting about to start. */
   get upcomingConfirmed(): boolean {
     return this.status?.upcomingConfirmed ?? false;
+  }
+
+  /**
+   * How much longer the running meeting may run: the gap before the next one,
+   * capped by the longest booking this room allows. Unlike `availableMinutes`
+   * it does not shrink with the clock — the gap it measures starts at the end
+   * of the meeting, not now.
+   */
+  get extendableMinutes(): number {
+    return this.status?.extendableMinutes ?? 0;
+  }
+
+  /**
+   * Whether "Extend reservation" is worth offering: a timed meeting is running
+   * and at least the shortest slot still fits before the next one.
+   */
+  get canExtend(): boolean {
+    return (
+      this.state === 'busy' && !this.isAllDay && this.extendableMinutes >= MIN_EXTEND_MINUTES
+    );
   }
 
   /** True while the room is taken by a full-day reservation. */
@@ -281,6 +302,20 @@ export class RoomStore {
     await this.mutate(
       (s) => s,
       (id) => api.rooms.reserve(id, startsAt.toISOString(), durationMinutes, title),
+    );
+  }
+
+  /**
+   * "Extend reservation": the meeting in the room runs `minutes` longer. The
+   * screen shows the later end straight away — the gap it runs into was
+   * already known to be free, so the server rarely disagrees.
+   */
+  async extendMeeting(minutes: number): Promise<void> {
+    const eventId = this.current?.id;
+    if (!eventId) return;
+    await this.mutate(
+      (s) => predictExtended(s, minutes),
+      (id) => api.rooms.extend(id, eventId, minutes),
     );
   }
 
@@ -556,6 +591,7 @@ function projectStatus(s: RoomStatus, now: Date): RoomStatus {
   }
 
   const checkIn = projectCheckIn(s, current, at);
+  const extendableMinutes = projectExtendable(s, current, next);
   const state: RoomState = !current
     ? freeState(next, at)
     : checkIn?.pending
@@ -585,8 +621,31 @@ function projectStatus(s: RoomStatus, now: Date): RoomStatus {
     // screen is counting down to a different one.
     upcomingConfirmed: s.upcomingConfirmed && next?.id === s.next?.id,
     availableMinutes,
+    extendableMinutes,
     events,
   };
+}
+
+/**
+ * How much longer the running meeting could run, worked out from the events on
+ * hand. The end of the calendar day is the one bound the tablet does not know
+ * (see `projectStatus`), so with nothing booked after the meeting this keeps
+ * the figure the server sent — and for a meeting that has only just started,
+ * where there is none, it falls back to the booking cap until the refresh that
+ * follows every projection fills it in.
+ */
+function projectExtendable(
+  s: RoomStatus,
+  current: CalendarEvent | null,
+  next: CalendarEvent | null,
+): number {
+  if (!current || current.isAllDay) return 0;
+  const cap = s.settings.maxBookingMinutes ?? Infinity;
+  if (next) {
+    return Math.max(0, Math.min(cap, minutesBetween(new Date(current.end), next.start)));
+  }
+  if (current.id === s.current?.id) return s.extendableMinutes;
+  return Number.isFinite(cap) ? cap : 0;
 }
 
 /**
@@ -649,7 +708,30 @@ function predictBooked(
     freeUntil: null,
     upcomingConfirmed: false,
     availableMinutes: 0,
+    extendableMinutes: projectExtendable(s, event, s.next),
     events: [event, ...s.events],
+  };
+}
+
+/**
+ * "Extend reservation": the running meeting ends later. The gap it grows into
+ * was free a moment ago, so the screen shows the new end right away — and the
+ * room keeps the rest of that gap available to extend into again.
+ */
+function predictExtended(s: RoomStatus, minutes: number): RoomStatus {
+  const current = s.current;
+  if (!current) return s;
+  const end = new Date(new Date(current.end).getTime() + minutes * 60_000).toISOString();
+  const extended = { ...current, end };
+  return {
+    ...s,
+    current: extended,
+    // Only the meeting's own end moves; a block that runs past it (which is
+    // why it would not have been extendable) keeps its later end.
+    busyUntil:
+      s.busyUntil && new Date(s.busyUntil) > new Date(end) ? s.busyUntil : end,
+    extendableMinutes: Math.max(0, s.extendableMinutes - minutes),
+    events: s.events.map((e) => (e.id === current.id ? extended : e)),
   };
 }
 
@@ -676,6 +758,7 @@ function predictFreed(s: RoomStatus, now: Date): RoomStatus {
     // End of day is unknown here; the server response fills it in.
     freeUntil: next ? next.start : null,
     availableMinutes,
+    extendableMinutes: 0,
     events,
   };
 }

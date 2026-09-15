@@ -86,6 +86,16 @@ export function formatIn(minutes: number): string {
   return m === 0 ? `in ${h} h` : `in ${h} h ${m} min`;
 }
 
+/**
+ * The figure on a countdown: "15 min", "1 h 30 min" — and, for the last stretch
+ * before the boundary, words. "0 min" next to "at 09:30" reads as if the
+ * meeting were already over (or the clock wrong), which is the one thing the
+ * room screen must never look like.
+ */
+export function formatCountdownMinutes(minutes: number): string {
+  return minutes <= 0 ? 'Less than a minute' : formatDuration(minutes);
+}
+
 /** "15 min", "1 h", "1 h 30 min" */
 export function formatDuration(minutes: number): string {
   if (minutes < 60) return `${minutes} min`;
@@ -102,7 +112,24 @@ export function formatCountdown(totalSeconds: number): string {
   return `${m.toString().padStart(2, '0')}:${r.toString().padStart(2, '0')}`;
 }
 
+/**
+ * Whole minutes that actually fit between the two moments. Used for capacity
+ * (how long a booking starting *now* may run), so it rounds down: rounding up
+ * would hand out a booking that runs seconds into the next meeting.
+ */
 export function minutesBetween(from: Date, to: Date | string): number {
   const t = typeof to === 'string' ? new Date(to) : to;
-  return Math.round((t.getTime() - from.getTime()) / 60000);
+  return Math.floor((t.getTime() - from.getTime()) / 60000);
+}
+
+/**
+ * Whole clock-minutes from `from` to `to` — the difference between the minutes
+ * a clock would show, not the raw distance. The kiosk prints the time floored
+ * to the minute, so a countdown taken from the exact difference can contradict
+ * what is next to it: at 09:24:40 the raw gap to 09:30 rounds to "5 min" while
+ * the clock still reads 09:24. Flooring both ends keeps the two in step.
+ */
+export function minutesUntil(from: Date, to: Date | string): number {
+  const t = typeof to === 'string' ? new Date(to) : to;
+  return Math.floor(t.getTime() / 60000) - Math.floor(from.getTime() / 60000);
 }

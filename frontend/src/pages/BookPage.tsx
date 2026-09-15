@@ -10,6 +10,12 @@ import { IDLE_RETURN_MS, useIdleReturn } from '@/hooks/useIdleReturn';
 import { PageShell } from '@/components/PageShell';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
+import {
+  DEFAULT_EXTEND_MINUTES,
+  DEFAULT_MINUTES,
+  EXTEND_MINUTES,
+  QUICK_MINUTES,
+} from '@/lib/booking';
 import { formatDuration, formatTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { roomIsFree, type CalendarEvent } from '@/types';
@@ -18,10 +24,6 @@ import { roomIsFree, type CalendarEvent } from '@/types';
 const UNIT_MINUTES = 5;
 const UNIT_MS = UNIT_MINUTES * 60_000;
 const HOUR_UNITS = 60 / UNIT_MINUTES;
-
-/** The quick slots, and the length a fresh selection starts at. */
-const QUICK_MINUTES = [15, 30, 45, 60, 90, 120];
-const DEFAULT_MINUTES = 30;
 
 /**
  * The picker opens on the working day, 08:00 – 17:00, and the arrows step it
@@ -77,16 +79,21 @@ type Proposal = { label: string; book: (() => Booking) | null };
  * that starts later is a reservation, and goes through the usual presence
  * prompt when it begins.
  *
- * Opened with `?when=later` — from a busy room — the page starts on the time
- * picker, which is the only view that makes sense while a meeting is running.
+ * Opened with `?when=later` the page starts on the time picker, which is the
+ * only view that makes sense for a slot later in the day.
+ *
+ * `?when=extend` is a third, narrower job on the same page: the meeting in the
+ * room runs longer. It is the quick view alone — a length, no start to choose
+ * — bounded by the gap before the next meeting instead of by what is free now.
  */
 export const BookPage = observer(function BookPage() {
   const { clock, device, room, toast } = useStores();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [mode, setMode] = useState<Mode>(() =>
-    searchParams.get('when') === 'later' ? 'time' : 'quick',
-  );
+  const when = searchParams.get('when');
+  /** Extending the running meeting rather than taking the room for a new one. */
+  const extending = when === 'extend';
+  const [mode, setMode] = useState<Mode>(() => (when === 'later' ? 'time' : 'quick'));
   const [busy, setBusy] = useState(false);
   const [proposal, setProposal] = useState<Proposal | null>(null);
   /** Set the moment the user confirms; freezes the page while it fades out. */
@@ -103,21 +110,38 @@ export const BookPage = observer(function BookPage() {
 
   const status = room.status;
   const tz = room.timezone;
-  const available = room.availableMinutes;
+  // Extending is bounded by the gap after the meeting, not by what is free now.
+  const available = extending ? room.extendableMinutes : room.availableMinutes;
 
   // Quick booking is "from now": if someone else took the room while it was
   // open, go back — once. The time picker draws the running meeting as taken
   // and offers the gaps after it, so a busy room is no reason to leave it.
   // Our own booking (optimistic or confirmed) never counts as "taken".
   useEffect(() => {
-    if (!status || roomIsFree(status.state) || mode !== 'quick') return;
+    if (!status || extending || roomIsFree(status.state) || mode !== 'quick') return;
     if (submitted.current || redirected.current) return;
     if (room.busy || room.optimistic) return;
     if (status.current && room.isOwnBooking(status.current.id)) return;
     redirected.current = true;
     toast.info('Room is no longer free');
     navigate('/', { replace: true });
-  }, [status, mode, room, navigate, toast]);
+  }, [status, extending, mode, room, navigate, toast]);
+
+  // The mirror image for extending: the meeting has to still be running, and
+  // the gap it would grow into still has to be there. Both can go away while
+  // the page is open — the meeting ends, or someone books the slot after it.
+  useEffect(() => {
+    if (!status || !extending || room.canExtend) return;
+    if (submitted.current || redirected.current) return;
+    if (room.busy || room.optimistic) return;
+    redirected.current = true;
+    toast.info(
+      roomIsFree(status.state)
+        ? 'The meeting has ended'
+        : 'This meeting can no longer be extended',
+    );
+    navigate('/', { replace: true });
+  }, [status, extending, room, navigate, toast]);
 
   const day = useMemo(() => (status ? dayBounds(new Date(status.now), tz) : null), [status, tz]);
 
@@ -125,6 +149,18 @@ export const BookPage = observer(function BookPage() {
     if (busy) return;
     setBusy(true);
     submitted.current = true;
+    if (extending) {
+      // Optimistic like a walk-in: the room screen already shows the later end
+      // by the time it comes back, so the confirmation names the new time
+      // rather than repeating what the screen says.
+      const until = room.current && new Date(+new Date(room.current.end) + minutes * 60_000);
+      room
+        .extendMeeting(minutes)
+        .then(() => toast.success(until ? `Extended until ${formatTime(until, tz)}` : 'Extended'))
+        .catch((err: Error) => toast.error('Could not extend the meeting', err.message));
+      navigate('/', { replace: true });
+      return;
+    }
     if (immediate) {
       // Optimistic: the room screen flips to busy right away, so there is
       // nothing to wait for here. A failure rolls it back and reports there.
@@ -195,17 +231,21 @@ export const BookPage = observer(function BookPage() {
 
   return (
     <PageShell
-      title={`Book ${status?.room.name ?? 'room'}`}
+      title={extending ? 'Extend reservation' : `Book ${status?.room.name ?? 'room'}`}
       subtitle={
         !status
           ? undefined
           : submitted.current
-            ? 'Booking…'
-            : mode === 'quick'
-              ? available >= UNIT_MINUTES
-                ? `Free for ${formatDuration(available)}${status.freeUntil && room.next ? ` · next meeting at ${formatTime(status.freeUntil, tz)}` : ''}`
-                : 'The room is free for less than 5 minutes'
-              : `${busyHint}Drag the pins, or nudge them 5 minutes at a time`
+            ? extending
+              ? 'Extending…'
+              : 'Booking…'
+            : extending
+              ? `${status.current ? `“${status.current.title}” runs` : 'Runs'} until ${formatTime(status.current?.end ?? status.now, tz)} · up to ${formatDuration(available)} more`
+              : mode === 'quick'
+                ? available >= UNIT_MINUTES
+                  ? `Free for ${formatDuration(available)}${status.freeUntil && room.next ? ` · next meeting at ${formatTime(status.freeUntil, tz)}` : ''}`
+                  : 'The room is free for less than 5 minutes'
+                : `${busyHint}Drag the pins, or nudge them 5 minutes at a time`
       }
       timezone={tz}
     >
@@ -226,7 +266,12 @@ export const BookPage = observer(function BookPage() {
             animate={{ opacity: 1, transition: { duration: 0.15, ease: 'easeOut' } }}
           >
             {mode === 'quick' ? (
-              <QuickBooking available={available} busy={busy} onProposal={setProposal} />
+              <QuickBooking
+                available={available}
+                extending={extending}
+                busy={busy}
+                onProposal={setProposal}
+              />
             ) : (
               <TimePicker
                 dayStart={day.start}
@@ -247,39 +292,46 @@ export const BookPage = observer(function BookPage() {
   );
 });
 
-/** Predefined lengths, starting now. */
+/** Predefined lengths — starting now, or added to the meeting already running. */
 const QuickBooking = observer(function QuickBooking({
   available,
+  extending,
   busy,
   onProposal,
 }: {
   available: number;
+  /** Adding to the running meeting rather than starting a new one. */
+  extending?: boolean;
   busy: boolean;
   onProposal: (proposal: Proposal) => void;
 }) {
   const [picked, setPicked] = useState<number | null>(null);
+  const slots = extending ? EXTEND_MINUTES : QUICK_MINUTES;
+  const preferred = extending ? DEFAULT_EXTEND_MINUTES : DEFAULT_MINUTES;
   const fits = (m: number) => m <= available;
 
   // Derived rather than stored, so a choice that stops fitting as the next
   // meeting comes closer simply falls away instead of needing a correction.
   // With little time left the longest slot that still fits stands in for the
   // default, so the room can always be taken in one more tap.
-  const fallback = QUICK_MINUTES.filter(fits).pop() ?? null;
+  const fallback = slots.filter(fits).pop() ?? null;
   const minutes =
-    picked !== null && fits(picked) ? picked : fits(DEFAULT_MINUTES) ? DEFAULT_MINUTES : fallback;
+    picked !== null && fits(picked) ? picked : fits(preferred) ? preferred : fallback;
 
   // The start is taken at the tap, not here: a tile picked a while ago still
   // books "from now".
   useEffect(() => {
     onProposal(
       minutes === null
-        ? { label: 'Pick a length', book: null }
+        ? { label: extending ? 'Pick how much longer' : 'Pick a length', book: null }
         : {
-            label: `Book now for ${formatDuration(minutes)}`,
+            label: extending
+              ? `Extend by ${formatDuration(minutes)}`
+              : `Book now for ${formatDuration(minutes)}`,
             book: () => ({ startAt: new Date(), minutes, immediate: true }),
           },
     );
-  }, [minutes, onProposal]);
+  }, [minutes, extending, onProposal]);
 
   return (
     // The header is a fixed height and the actions sit at the bottom; the
@@ -289,7 +341,7 @@ const QuickBooking = observer(function QuickBooking({
     <div className="flex flex-1 flex-col">
       <div className="flex flex-1 items-center py-[clamp(1rem,4vh,3rem)]">
         <div className="grid w-full grid-cols-3 gap-6">
-          {QUICK_MINUTES.map((m) => {
+          {slots.map((m) => {
             const slotFits = fits(m);
             return (
               <button
