@@ -20,9 +20,14 @@ export const EXTEND_MINUTES = [15, 20, 30];
 export const DEFAULT_EXTEND_MINUTES = 15;
 
 /**
- * The shortest extension there is — what the server accepts, not a slot. A gap
- * that stops short of the smallest slot is still worth taking: the page offers
- * the gap itself in place of the slot above it. Below this the button is not
+ * The shortest meeting the server accepts — a floor, not a slot. A gap that
+ * stops short of the smallest slot is still worth taking: the quick views
+ * offer the gap itself in place of the slot above it, down to this.
+ */
+export const MIN_BOOKING_MINUTES = 5;
+
+/**
+ * The shortest extension there is. Below this "Extend reservation" is not
  * offered at all rather than leading to a page that can only say no.
  */
-export const MIN_EXTEND_MINUTES = 5;
+export const MIN_EXTEND_MINUTES = MIN_BOOKING_MINUTES;

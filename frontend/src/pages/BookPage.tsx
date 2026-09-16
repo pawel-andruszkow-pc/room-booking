@@ -14,6 +14,7 @@ import {
   DEFAULT_EXTEND_MINUTES,
   DEFAULT_MINUTES,
   EXTEND_MINUTES,
+  MIN_BOOKING_MINUTES,
   QUICK_MINUTES,
 } from '@/lib/booking';
 import { formatDuration, formatTime } from '@/lib/time';
@@ -313,15 +314,20 @@ const QuickBooking = observer(function QuickBooking({
   const longestFitting = slots.filter(fits).pop() ?? null;
 
   /**
-   * Extending is usually stopped by the next meeting mid-slot: with 25 minutes
-   * before it, 15 and 20 fit and 30 does not, yet those last 5 minutes are
-   * free and worth offering. So the first slot past what is left takes the
-   * remainder as its label ("25 min") and books exactly that; the slots above
-   * it are out of reach and say so. Only when the remainder is longer than
-   * every slot that fits — otherwise the tile would repeat one of them.
+   * The next meeting rarely lands on a slot boundary: with 25 minutes before
+   * it, 15 and 20 fit and 30 does not, yet those last 5 minutes are free and
+   * worth offering — and with 6 minutes before it, nothing fits at all while
+   * the room is still free. So the first slot past what is left takes the
+   * remainder as its label ("25 min", "6 min") and books exactly that; the
+   * slots above it are out of reach and say so.
+   *
+   * Only when the remainder is longer than every slot that fits — otherwise
+   * the tile would repeat one of them — and long enough to book at all.
    */
   const remainder =
-    extending && available > (longestFitting ?? 0) ? (slots.find((m) => !fits(m)) ?? null) : null;
+    available >= MIN_BOOKING_MINUTES && available > (longestFitting ?? 0)
+      ? (slots.find((m) => !fits(m)) ?? null)
+      : null;
   /** A tile is offered when it fits outright, or when it carries the remainder. */
   const offered = (m: number) => fits(m) || m === remainder;
   /** What a tile books: its own length, or what is left on the remainder tile. */
