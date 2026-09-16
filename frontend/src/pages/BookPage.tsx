@@ -379,7 +379,10 @@ const QuickBooking = observer(function QuickBooking({
               >
                 {formatDuration(lengthOf(m))}
                 {m === remainder && (
-                  <span className="text-lg font-semibold text-white/60">All that is left</span>
+                  // Inherits the tile's own colour — dark ink once the tile is
+                  // picked, white while it is not — so it stays readable on
+                  // both instead of being white on emerald.
+                  <span className="text-lg font-semibold opacity-75">Maximum available</span>
                 )}
                 {!slotOffered && (
                   <span className="text-lg font-semibold text-white/50">Not available</span>
@@ -440,10 +443,15 @@ function TimePicker({
     [events, dayStart, total],
   );
 
-  /** Drawn as taken: the part of the day that has passed, then every meeting. */
+  /**
+   * Drawn as taken: the part of the day that has passed, then every meeting.
+   * The two are not the same kind of taken — a meeting is the room being busy,
+   * which the track shows in the colour the room screen uses for it, while the
+   * morning that is simply over stays neutral.
+   */
   const blocked = useMemo(() => {
-    const spans = meetings.map((m): [number, number] => [m.from, m.to]);
-    return nowUnit > 0 ? [[0, nowUnit] as [number, number], ...spans] : spans;
+    const spans = meetings.map((m): Blocked => ({ from: m.from, to: m.to, kind: 'busy' }));
+    return nowUnit > 0 ? [{ from: 0, to: nowUnit, kind: 'past' } as Blocked, ...spans] : spans;
   }, [meetings, nowUnit]);
 
   const inMeeting = (unit: number) => meetings.some((m) => unit >= m.from && unit < m.to);
@@ -712,21 +720,27 @@ function Pin({
   );
 }
 
+/** A stretch of the track that cannot be booked, and why. */
+type Blocked = { from: number; to: number; kind: 'busy' | 'past' };
+
 /** Taken parts of the track. Only the window moves these, never a drag. */
 const BlockedSpans = memo(function BlockedSpans({
   blocked,
   from,
   to,
 }: {
-  blocked: Array<[number, number]>;
+  blocked: Blocked[];
   from: number;
   to: number;
 }) {
-  return blocked.map(([f, t]) => (
+  return blocked.map((b) => (
     <span
-      key={`${f}-${t}`}
-      className="absolute inset-y-0 bg-white/25"
-      style={{ left: `${pct(f, from, to)}%`, width: `${pct(t, from, to) - pct(f, from, to)}%` }}
+      key={`${b.from}-${b.to}`}
+      className={cn('absolute inset-y-0', b.kind === 'busy' ? 'bg-busy' : 'bg-white/25')}
+      style={{
+        left: `${pct(b.from, from, to)}%`,
+        width: `${pct(b.to, from, to) - pct(b.from, from, to)}%`,
+      }}
     />
   ));
 });
