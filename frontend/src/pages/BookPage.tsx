@@ -310,13 +310,31 @@ const QuickBooking = observer(function QuickBooking({
   const preferred = extending ? DEFAULT_EXTEND_MINUTES : DEFAULT_MINUTES;
   const fits = (m: number) => m <= available;
 
+  const longestFitting = slots.filter(fits).pop() ?? null;
+
+  /**
+   * Extending is usually stopped by the next meeting mid-slot: with 25 minutes
+   * before it, 15 and 20 fit and 30 does not, yet those last 5 minutes are
+   * free and worth offering. So the first slot past what is left takes the
+   * remainder as its label ("25 min") and books exactly that; the slots above
+   * it are out of reach and say so. Only when the remainder is longer than
+   * every slot that fits — otherwise the tile would repeat one of them.
+   */
+  const remainder =
+    extending && available > (longestFitting ?? 0) ? (slots.find((m) => !fits(m)) ?? null) : null;
+  /** A tile is offered when it fits outright, or when it carries the remainder. */
+  const offered = (m: number) => fits(m) || m === remainder;
+  /** What a tile books: its own length, or what is left on the remainder tile. */
+  const lengthOf = (m: number) => (m === remainder ? available : m);
+
   // Derived rather than stored, so a choice that stops fitting as the next
   // meeting comes closer simply falls away instead of needing a correction.
   // With little time left the longest slot that still fits stands in for the
   // default, so the room can always be taken in one more tap.
-  const fallback = slots.filter(fits).pop() ?? null;
-  const minutes =
-    picked !== null && fits(picked) ? picked : fits(preferred) ? preferred : fallback;
+  const fallback = longestFitting ?? remainder;
+  const slot =
+    picked !== null && offered(picked) ? picked : offered(preferred) ? preferred : fallback;
+  const minutes = slot === null ? null : lengthOf(slot);
 
   // The start is taken at the tap, not here: a tile picked a while ago still
   // books "from now".
@@ -342,25 +360,28 @@ const QuickBooking = observer(function QuickBooking({
       <div className="flex flex-1 items-center py-[clamp(1rem,4vh,3rem)]">
         <div className="grid w-full grid-cols-3 gap-6">
           {slots.map((m) => {
-            const slotFits = fits(m);
+            const slotOffered = offered(m);
             return (
               <button
                 key={m}
                 type="button"
-                disabled={busy || !slotFits}
+                disabled={busy || !slotOffered}
                 onClick={() => setPicked(m)}
                 className={cn(
                   chipClass,
                   'flex h-[clamp(6.5rem,17vh,10rem)] flex-col items-center justify-center gap-2 text-4xl',
                   // Unavailable slots keep enough contrast to read the reason;
                   // dimming them to nothing would hide the label with them.
-                  minutes === m ? chipOn : slotFits ? chipOff : 'bg-white/5 text-white/40',
+                  slot === m ? chipOn : slotOffered ? chipOff : 'bg-white/5 text-white/40',
                   'disabled:opacity-100',
                   busy && 'opacity-40',
                 )}
               >
-                {formatDuration(m)}
-                {!slotFits && (
+                {formatDuration(lengthOf(m))}
+                {m === remainder && (
+                  <span className="text-lg font-semibold text-white/60">All that is left</span>
+                )}
+                {!slotOffered && (
                   <span className="text-lg font-semibold text-white/50">Not available</span>
                 )}
               </button>

@@ -20,8 +20,9 @@ export const EXTEND_MINUTES = [15, 20, 30];
 export const DEFAULT_EXTEND_MINUTES = 15;
 
 /**
- * The shortest extension there is. The room screen needs it too: with a gap
- * smaller than this every slot would be out of reach, so the button is not
+ * The shortest extension there is — what the server accepts, not a slot. A gap
+ * that stops short of the smallest slot is still worth taking: the page offers
+ * the gap itself in place of the slot above it. Below this the button is not
  * offered at all rather than leading to a page that can only say no.
  */
-export const MIN_EXTEND_MINUTES = EXTEND_MINUTES[0];
+export const MIN_EXTEND_MINUTES = 5;
