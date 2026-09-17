@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { observer } from 'mobx-react-lite';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useStores } from '@/stores/StoreContext';
+import { useDailyReload } from '@/hooks/useDailyReload';
 import { AppUpdater } from '@/components/AppUpdater';
 import { RequireAuth } from '@/components/RequireAuth';
 import { PageTransition } from '@/components/PageTransition';
@@ -17,6 +18,7 @@ import { AdminPage } from '@/pages/admin/AdminPage';
 export const App = observer(function App() {
   const store = useStores();
   const location = useLocation();
+  useDailyReload();
 
   useEffect(() => {
     void store.bootstrap();
