@@ -8,6 +8,7 @@ import {
   CalendarDays,
   CalendarPlus,
   Check,
+  DoorOpen,
   MapPin,
   Settings,
   Timer,
@@ -679,6 +680,7 @@ function BusyActions({
           disabled={disabled}
           onClick={() => onConfirmingChange(true)}
         >
+          <DoorOpen className="h-[1.2em] w-[1.2em] shrink-0" />
           <span className="truncate">Free up the room</span>
         </Button>
         {onExtend ? (
@@ -712,7 +714,8 @@ function BusyActions({
         className={pairButtonClass}
         onClick={() => onConfirmingChange(false)}
       >
-        Cancel
+        <X className="h-[1.2em] w-[1.2em] shrink-0" />
+        <span className="truncate">Cancel</span>
       </Button>
     </div>
   );
