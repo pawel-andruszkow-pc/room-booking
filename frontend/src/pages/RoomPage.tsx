@@ -74,12 +74,13 @@ const checkInButtonClass =
 /**
  * Two buttons side by side must share the left column at any width. Half of
  * that column is not much for a label like "Extend reservation", so the pair
- * runs tighter padding and a smaller floor on the type than a button standing
- * on its own: at tablet widths the words fit, rather than ending in an ellipsis.
+ * runs tighter padding and gaps than a button standing on its own. The type
+ * stays at the xl size, the same as "Book this room" on the free screen, so
+ * the footer reads at one weight whichever state the room is in.
  */
 const pairClass = 'flex w-full gap-[clamp(0.75rem,1.2vw,1.25rem)]';
 const pairButtonClass =
-  'min-w-0 flex-1 gap-[clamp(0.5rem,0.8vw,0.75rem)] px-[clamp(0.875rem,1.6vw,2.5rem)] text-[clamp(1.125rem,1.6vw,1.875rem)]';
+  'min-w-0 flex-1 gap-[clamp(0.5rem,0.8vw,0.75rem)] px-[clamp(0.875rem,1.6vw,2.5rem)]';
 
 /** Footer action panel. Instant on this tablet's own taps, like the headline. */
 const panelMotion = (instant: boolean) => ({
@@ -379,8 +380,10 @@ export const RoomPage = observer(function RoomPage() {
           </Button>
         )}
 
-        {/* Bottom: actions, left-aligned, at most half the width. */}
-        <footer className="relative z-20 flex h-28 w-full max-w-[52%] min-w-0 items-end">
+        {/* Bottom: actions, left-aligned. Each panel caps its own width: a
+            lone button or the check-in pill stays within half the screen, the
+            busy pair a little wider so both labels fit at the xl type size. */}
+        <footer className="relative z-20 flex h-28 w-full min-w-0 items-end">
           <AnimatePresence mode="wait" initial={false}>
             {state === 'free' && status && (
               <motion.div key="book" {...panelMotion(instant)}>
@@ -399,7 +402,11 @@ export const RoomPage = observer(function RoomPage() {
               </motion.div>
             )}
             {state === 'busy-soon' && status?.settings.checkInEnabled && (
-              <motion.div key="soon-actions" {...panelMotion(instant)} className="w-full">
+              <motion.div
+                key="soon-actions"
+                {...panelMotion(instant)}
+                className="w-full max-w-[52%]"
+              >
                 {/* The one place a tap on this tablet is animated rather than
                     switched instantly: the swap IS the acknowledgement of the
                     tap, so the white pill shrinking away as the disc springs in
@@ -467,7 +474,11 @@ export const RoomPage = observer(function RoomPage() {
               </motion.div>
             )}
             {state === 'busy' && !room.isAllDay && (
-              <motion.div key="busy-actions" {...panelMotion(instant)} className="w-full">
+              <motion.div
+                key="busy-actions"
+                {...panelMotion(instant)}
+                className="w-full max-w-[80%]"
+              >
                 <BusyActions
                   confirming={confirmFree}
                   disabled={room.busy}
