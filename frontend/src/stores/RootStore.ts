@@ -6,6 +6,7 @@ import { ClockStore } from './ClockStore';
 import { DayStore } from './DayStore';
 import { DeviceStore } from './DeviceStore';
 import { RoomStore } from './RoomStore';
+import { TimerStore } from './TimerStore';
 import { ToastStore } from './ToastStore';
 import { UpdateStore } from './UpdateStore';
 
@@ -23,6 +24,7 @@ export class RootStore {
   readonly auth = new AuthStore();
   readonly device = new DeviceStore();
   readonly room = new RoomStore(this.clock);
+  readonly timer = new TimerStore(this.clock);
   readonly day = new DayStore();
   readonly admin = new AdminStore();
   readonly toast = new ToastStore();
@@ -44,6 +46,7 @@ export class RootStore {
         auth: false,
         device: false,
         room: false,
+        timer: false,
         day: false,
         admin: false,
         toast: false,

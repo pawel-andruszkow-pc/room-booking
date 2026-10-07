@@ -12,6 +12,7 @@ import { LoginPage } from '@/pages/LoginPage';
 import { RoomPage } from '@/pages/RoomPage';
 import { BookPage } from '@/pages/BookPage';
 import { TodayPage } from '@/pages/TodayPage';
+import { TimerPage } from '@/pages/TimerPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { AdminPage } from '@/pages/admin/AdminPage';
 
@@ -76,6 +77,16 @@ export const App = observer(function App() {
             <RequireAuth>
               <PageTransition>
                 <TodayPage />
+              </PageTransition>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/timer"
+          element={
+            <RequireAuth>
+              <PageTransition>
+                <TimerPage />
               </PageTransition>
             </RequireAuth>
           }

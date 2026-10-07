@@ -19,6 +19,7 @@ import { useKiosk } from '@/hooks/useKiosk';
 import { useSecretTap } from '@/hooks/useSecretTap';
 import { Button } from '@/components/ui/button';
 import { Clock } from '@/components/Clock';
+import { TimerBadge } from '@/components/TimerBadge';
 import { Spinner } from '@/components/ui/spinner';
 import { formatCountdown, formatCountdownMinutes, formatTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
@@ -367,16 +368,19 @@ export const RoomPage = observer(function RoomPage() {
           </AnimatePresence>
         </div>
 
-        {/* Bottom right: whole-day overview. */}
+        {/* Bottom right: the timer and the whole-day overview. */}
         {status && (
-          <Button
-            variant="ghost"
-            size="lg"
-            className="absolute bottom-[clamp(2rem,3vw,3.5rem)] right-[clamp(2.5rem,4.2vw,5rem)] z-20 text-white/85"
-            onClick={() => navigate('/today')}
-          >
-            <CalendarDays className="h-8 w-8" /> Today
-          </Button>
+          <div className="absolute bottom-[clamp(2rem,3vw,3.5rem)] right-[clamp(2.5rem,4.2vw,5rem)] z-20 flex items-center gap-3">
+            <TimerBadge />
+            <Button
+              variant="ghost"
+              size="lg"
+              className="text-white/85"
+              onClick={() => navigate('/today')}
+            >
+              <CalendarDays className="h-8 w-8" /> Today
+            </Button>
+          </div>
         )}
 
         {/* Bottom: actions, left-aligned, at most half the width. */}
