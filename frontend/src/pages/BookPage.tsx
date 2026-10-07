@@ -577,7 +577,7 @@ function TimePicker({
 
   return (
     <div className="flex flex-1 flex-col">
-      <div className="flex flex-1 flex-col justify-center gap-12 py-[clamp(1rem,4vh,3rem)]">
+      <div className="flex flex-1 flex-col justify-center gap-[clamp(2rem,6vh,3rem)] py-[clamp(0.5rem,2vh,3rem)]">
         <div className="flex items-end justify-center gap-[clamp(1.5rem,4vw,5rem)]">
           <Pin
             label="From"

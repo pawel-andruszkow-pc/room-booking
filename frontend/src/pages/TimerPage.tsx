@@ -19,7 +19,7 @@ const MAX_MINUTES = 180;
 const chipOn = 'bg-emerald-400 text-ink shadow-lg shadow-emerald-900/30';
 const chipOff = 'bg-white/10 hover:bg-white/15';
 const chipClass =
-  'flex h-[clamp(5.5rem,14vh,8rem)] items-center justify-center rounded-2xl text-4xl font-bold transition-[background-color,color] duration-150';
+  'flex h-[clamp(5rem,12vh,8rem)] items-center justify-center rounded-2xl text-4xl font-bold transition-[background-color,color] duration-150';
 
 /** The −/+ nudges either side of the figure; same look as the booking page has. */
 const nudgeClass =
@@ -63,7 +63,7 @@ export const TimerPage = observer(function TimerPage() {
       timezone={room.timezone}
     >
       <div className="flex flex-1 flex-col">
-        <div className="flex flex-1 flex-col justify-center gap-[clamp(2rem,6vh,4rem)] py-[clamp(1rem,4vh,3rem)]">
+        <div className="flex flex-1 flex-col justify-center gap-[clamp(1.5rem,5vh,4rem)] py-[clamp(0.5rem,2vh,3rem)]">
           {/* The figure, with the nudges either side of it. */}
           <div className="flex items-center justify-center gap-6">
             <div className="flex gap-3">
