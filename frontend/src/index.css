@@ -20,6 +20,18 @@
   --color-halloween: #2a1040;
   --color-pumpkin: #ff8a1f;
 
+  /* The other seasons (see lib/season.ts): background, then the "Busy" headline */
+  --color-santa: #13224f;
+  --color-santa-red: #ff6b6b;
+  --color-christmas: #0e3b2c;
+  --color-christmas-gold: #ffd25e;
+  --color-valentines: #5c0f2f;
+  --color-valentines-pink: #ff8fb3;
+  --color-april-fools: #0b5563;
+  --color-april-fools-yellow: #ffe14d;
+  --color-womens-day: #3f1d63;
+  --color-womens-day-lilac: #f0c4ff;
+
   --radius-xl2: 1.75rem;
 
   --animate-pulse-soft: pulse-soft 2.4s ease-in-out infinite;
@@ -29,6 +41,18 @@
   --animate-spider: spider 4.5s ease-in-out infinite alternate;
   --animate-fog: fog 16s ease-in-out infinite alternate;
   --animate-candle: candle 2.8s linear infinite;
+  --animate-fall: fall 14s linear infinite;
+  --animate-rise: rise 16s linear infinite;
+  --animate-sway: sway 4s ease-in-out infinite alternate;
+  --animate-twinkle: twinkle 1.6s ease-in-out infinite alternate;
+  --animate-sleigh: sleigh 24s linear infinite;
+  --animate-bob: bob 1.2s ease-in-out infinite alternate;
+  --animate-heartbeat: heartbeat 1.6s ease-in-out infinite;
+  --animate-flip: flip 1.6s linear infinite;
+  --animate-peek: peek 9s ease-in-out infinite;
+  --animate-look: look 4.5s ease-in-out infinite;
+  --animate-stem: stem 3.2s ease-in-out infinite alternate;
+  --animate-wobble: wobble 2.4s ease-in-out infinite alternate;
 
   @keyframes bat-fly {
     0% {
@@ -87,6 +111,128 @@
     }
     76% {
       opacity: 0.85;
+    }
+  }
+
+  /* Snow, petals and confetti from above the top edge to below the bottom one. */
+  @keyframes fall {
+    from {
+      transform: translateY(-10vh);
+    }
+    to {
+      transform: translateY(110vh);
+    }
+  }
+  @keyframes rise {
+    from {
+      transform: translateY(110vh);
+    }
+    to {
+      transform: translateY(-15vh);
+    }
+  }
+  @keyframes sway {
+    from {
+      transform: translateX(-1.5vw) rotate(-12deg);
+    }
+    to {
+      transform: translateX(1.5vw) rotate(12deg);
+    }
+  }
+  @keyframes twinkle {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0.35;
+    }
+  }
+  @keyframes sleigh {
+    0% {
+      transform: translate(-30vw, 6vh);
+    }
+    50% {
+      transform: translate(45vw, -2vh);
+    }
+    100% {
+      transform: translate(120vw, 3vh);
+    }
+  }
+  @keyframes bob {
+    from {
+      transform: translateY(-0.4rem);
+    }
+    to {
+      transform: translateY(0.4rem);
+    }
+  }
+  @keyframes heartbeat {
+    0%,
+    40%,
+    100% {
+      transform: scale(1);
+    }
+    15% {
+      transform: scale(1.1);
+    }
+    28% {
+      transform: scale(1.04);
+    }
+  }
+  @keyframes flip {
+    0% {
+      transform: rotate(0) scaleY(1);
+    }
+    50% {
+      transform: rotate(180deg) scaleY(-0.4);
+    }
+    100% {
+      transform: rotate(360deg) scaleY(1);
+    }
+  }
+  /* Down out of sight most of the time, up for a look around now and then. */
+  @keyframes peek {
+    0%,
+    30%,
+    100% {
+      transform: translateY(100%);
+    }
+    42%,
+    86% {
+      transform: translateY(0);
+    }
+  }
+  @keyframes look {
+    0%,
+    100% {
+      transform: translate(0, 0);
+    }
+    20%,
+    35% {
+      transform: translate(-8px, -4px);
+    }
+    50%,
+    65% {
+      transform: translate(8px, -6px);
+    }
+    80% {
+      transform: translate(2px, 6px);
+    }
+  }
+  @keyframes stem {
+    from {
+      transform: rotate(-4deg);
+    }
+    to {
+      transform: rotate(4deg);
+    }
+  }
+  @keyframes wobble {
+    from {
+      transform: rotate(-2.5deg);
+    }
+    to {
+      transform: rotate(2.5deg);
     }
   }
 

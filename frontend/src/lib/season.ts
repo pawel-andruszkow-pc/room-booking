@@ -1,51 +1,88 @@
 import { session } from './utils';
 
-/** Seasonal dressing for the busy screen. Only one so far. */
-export type Season = 'halloween';
+/** Seasonal dressing for the busy screen. */
+export type Season =
+  'valentines' | 'womens-day' | 'april-fools' | 'halloween' | 'santa' | 'christmas';
 
 const SESSION_KEY = 'rb.theme';
 
-type Override = { theme: 'halloween'; until: number } | { theme: 'none' };
+type Override = { theme: Season; until: number } | { theme: 'none' };
+
+/** When a season runs: `start` is its first moment, `end` the first moment after it. */
+type Window = { start: number; end: number };
+
+/** Monday-based day of the week: 0 = Monday … 6 = Sunday. */
+function weekday(year: number, month: number, day: number): number {
+  return (new Date(year, month, day).getDay() + 6) % 7;
+}
 
 /**
- * Halloween week in `year`: the working week 31 October falls in, from Monday
- * until Halloween is over. On a weekend Halloween the office is empty, so it
- * is the Monday to Friday before it. `end` is the first moment after it.
+ * A one-day season: the day itself. On a weekend the office is empty, so it
+ * is the Friday before instead.
  */
-function halloweenWeek(year: number): { start: number; end: number } {
-  // Monday-based day of the week: 0 = Monday … 6 = Sunday.
-  const weekday = (new Date(year, 9, 31).getDay() + 6) % 7;
-  const monday = 31 - weekday;
+function workingDay(year: number, month: number, day: number): Window {
+  const wd = weekday(year, month, day);
+  const date = wd >= 5 ? day - (wd - 4) : day;
   return {
-    start: new Date(year, 9, monday).getTime(),
-    // The day after Halloween, or Saturday when Halloween is on a weekend.
-    end: Math.min(new Date(year, 10, 1).getTime(), new Date(year, 9, monday + 5).getTime()),
+    start: new Date(year, month, date).getTime(),
+    end: new Date(year, month, date + 1).getTime(),
   };
 }
 
-/** The end of the Halloween week still ahead of (or running at) `date`. */
-function halloweenEnd(date: Date): number {
-  const { end } = halloweenWeek(date.getFullYear());
-  return date.getTime() < end ? end : halloweenWeek(date.getFullYear() + 1).end;
+/**
+ * A week-long season: the working week the day falls in, from Monday until the
+ * day is over. On a weekend it is the Monday to Friday before it.
+ */
+function workingWeek(year: number, month: number, day: number): Window {
+  const monday = day - weekday(year, month, day);
+  return {
+    start: new Date(year, month, monday).getTime(),
+    // The day after, or Saturday when the day is on a weekend.
+    end: Math.min(
+      new Date(year, month, day + 1).getTime(),
+      new Date(year, month, monday + 5).getTime(),
+    ),
+  };
+}
+
+/** Each season's window in a given year. No two of them overlap. */
+const SEASONS: Record<Season, (year: number) => Window> = {
+  valentines: (year) => workingDay(year, 1, 14),
+  'womens-day': (year) => workingDay(year, 2, 8),
+  'april-fools': (year) => workingDay(year, 3, 1),
+  halloween: (year) => workingWeek(year, 9, 31),
+  // Mikołajki: Santa comes on St Nicholas' Day.
+  santa: (year) => workingDay(year, 11, 6),
+  christmas: (year) => workingWeek(year, 11, 25),
+};
+
+export function isSeason(value: unknown): value is Season {
+  return typeof value === 'string' && Object.hasOwn(SEASONS, value);
+}
+
+/** The end of `season`'s window still ahead of (or running at) `date`. */
+function seasonEnd(season: Season, date: Date): number {
+  const { end } = SEASONS[season](date.getFullYear());
+  return date.getTime() < end ? end : SEASONS[season](date.getFullYear() + 1).end;
 }
 
 /**
- * `?theme=halloween` forces the dressing for the browser tab until Halloween is
- * over, so it can be looked at (or started early) outside its week;
+ * `?theme=<season>` forces that dressing for the browser tab until the season
+ * is over, so it can be looked at (or started early) outside its window;
  * `?theme=none` turns it off and `?theme=auto` goes back to the calendar.
  *
  * The parameter is taken out of the address once read. The tablet reloads
  * itself every night (useDailyReload), and with the parameter still in the URL
- * each reload would arm the theme again — past Halloween, into next year.
+ * each reload would arm the theme again — past the season, into next year.
  */
 const override: Override | null = (() => {
   const url = new URL(window.location.href);
   const param = url.searchParams.get('theme');
   if (param !== null) {
-    if (param === 'halloween') {
+    if (isSeason(param)) {
       session.set(
         SESSION_KEY,
-        JSON.stringify({ theme: 'halloween', until: halloweenEnd(new Date()) }),
+        JSON.stringify({ theme: param, until: seasonEnd(param, new Date()) }),
       );
     } else if (param === 'none') session.set(SESSION_KEY, JSON.stringify({ theme: 'none' }));
     else if (param === 'auto') session.remove(SESSION_KEY);
@@ -54,17 +91,30 @@ const override: Override | null = (() => {
   }
   try {
     const stored = JSON.parse(session.get(SESSION_KEY) ?? 'null') as Override | null;
-    return stored?.theme === 'halloween' || stored?.theme === 'none' ? stored : null;
+    return isSeason(stored?.theme) || stored?.theme === 'none' ? stored : null;
   } catch {
     return null;
   }
 })();
 
-/** The season on `date`: Halloween in its working week (see `halloweenWeek`). */
+/** Set by the dev mock (`?template`): this season, whatever the date. */
+let forced: Season | undefined;
+
+export function forceSeason(season: Season): void {
+  forced = season;
+}
+
+/** The season on `date`, if it falls in one's window (see `SEASONS`). */
 export function seasonOn(date: Date): Season | null {
+  if (forced) return forced;
   if (override?.theme === 'none') return null;
-  // A forced Halloween ends with the real one.
-  if (override?.theme === 'halloween' && date.getTime() < override.until) return 'halloween';
-  const { start, end } = halloweenWeek(date.getFullYear());
-  return date.getTime() >= start && date.getTime() < end ? 'halloween' : null;
+  // A forced season ends with the real one.
+  if (override && date.getTime() < override.until) return override.theme;
+  const year = date.getFullYear();
+  const at = date.getTime();
+  for (const season of Object.keys(SEASONS) as Season[]) {
+    const { start, end } = SEASONS[season](year);
+    if (at >= start && at < end) return season;
+  }
+  return null;
 }

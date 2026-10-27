@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ComponentType } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
@@ -21,8 +21,13 @@ import { Button } from '@/components/ui/button';
 import { Clock } from '@/components/Clock';
 import { TimerBadge } from '@/components/TimerBadge';
 import { HalloweenScene } from '@/components/HalloweenScene';
+import { SantaScene } from '@/components/SantaScene';
+import { ChristmasScene } from '@/components/ChristmasScene';
+import { ValentinesScene } from '@/components/ValentinesScene';
+import { AprilFoolsScene } from '@/components/AprilFoolsScene';
+import { WomensDayScene } from '@/components/WomensDayScene';
 import { Spinner } from '@/components/ui/spinner';
-import { seasonOn } from '@/lib/season';
+import { seasonOn, type Season } from '@/lib/season';
 import { formatCountdown, formatCountdownMinutes, formatTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { roomIsFree } from '@/types';
@@ -134,6 +139,44 @@ const headlineMotion = (instant: boolean) => ({
   custom: instant,
 });
 
+/**
+ * How each season dresses a busy room: the background, the "Busy" headline
+ * and the scene behind the content.
+ */
+const seasonLook: Record<Season, { bg: string; headline: string; Scene: ComponentType }> = {
+  valentines: {
+    bg: 'bg-valentines',
+    headline: 'text-valentines-pink [text-shadow:0_0_0.3em_rgba(255,80,140,0.45)]',
+    Scene: ValentinesScene,
+  },
+  'womens-day': {
+    bg: 'bg-womens-day',
+    headline: 'text-womens-day-lilac [text-shadow:0_0_0.3em_rgba(220,140,255,0.4)]',
+    Scene: WomensDayScene,
+  },
+  'april-fools': {
+    bg: 'bg-april-fools',
+    headline: 'text-april-fools-yellow [text-shadow:0.06em_0.06em_0_#ff5fa2]',
+    Scene: AprilFoolsScene,
+  },
+  // Pumpkin orange with an ember glow, against the night sky.
+  halloween: {
+    bg: 'bg-halloween',
+    headline: 'text-pumpkin [text-shadow:0_0_0.3em_rgba(255,110,20,0.45)]',
+    Scene: HalloweenScene,
+  },
+  santa: {
+    bg: 'bg-santa',
+    headline: 'text-santa-red [text-shadow:0_0_0.3em_rgba(255,90,90,0.45)]',
+    Scene: SantaScene,
+  },
+  christmas: {
+    bg: 'bg-christmas',
+    headline: 'text-christmas-gold [text-shadow:0_0_0.3em_rgba(255,200,80,0.45)]',
+    Scene: ChristmasScene,
+  },
+};
+
 /** The kiosk screen: one room, its state, and the actions that make sense right now. */
 export const RoomPage = observer(function RoomPage() {
   const { auth, clock, device, room, toast } = useStores();
@@ -170,19 +213,11 @@ export const RoomPage = observer(function RoomPage() {
 
   const status = room.status;
   const tz = room.timezone;
-  // Halloween week dresses the busy room for the night. Read off the minute,
-  // not the second, so the page does not re-render on every clock tick.
-  const halloween =
-    Boolean(status) &&
-    !roomIsFree(state) &&
-    seasonOn(new Date(clock.minute * 60_000)) === 'halloween';
-  const bg = !status
-    ? 'bg-ink'
-    : roomIsFree(state)
-      ? 'bg-free'
-      : halloween
-        ? 'bg-halloween'
-        : 'bg-busy';
+  // A season (Halloween week, Christmas…) dresses the busy room. Read off the
+  // minute, not the second, so the page does not re-render on every clock tick.
+  const season = status && !roomIsFree(state) ? seasonOn(new Date(clock.minute * 60_000)) : null;
+  const look = season ? seasonLook[season] : null;
+  const bg = !status ? 'bg-ink' : roomIsFree(state) ? 'bg-free' : (look?.bg ?? 'bg-busy');
   // A tap on this tablet switches the screen instantly; only changes that
   // arrive from the clock or the calendar get the free/busy animation.
   const instant = room.changedByUser;
@@ -204,7 +239,7 @@ export const RoomPage = observer(function RoomPage() {
       {/* Depth without repaint cost: static radial gradient overlay. */}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_90%_at_10%_0%,rgba(255,255,255,0.18),transparent_55%),radial-gradient(90%_80%_at_100%_100%,rgba(0,0,0,0.22),transparent_60%)]" />
 
-      <AnimatePresence>{halloween && <HalloweenScene key="halloween" />}</AnimatePresence>
+      <AnimatePresence>{season && look && <look.Scene key={season} />}</AnimatePresence>
 
       {/* Dims everything except the footer buttons while confirming "Free up the room?". */}
       <AnimatePresence>
@@ -304,7 +339,7 @@ export const RoomPage = observer(function RoomPage() {
               </motion.div>
             ) : state === 'awaiting-check-in' && room.current ? (
               <motion.div key="check" {...stateMotion(instant)} className={splitClass}>
-                <BusyHeadline instant={instant} title={room.current.title} halloween={halloween} />
+                <BusyHeadline instant={instant} title={room.current.title} season={season} />
                 <div className={splitRightClass}>
                   <p className="text-[clamp(1.75rem,2.9vw,3.375rem)] font-bold leading-tight">
                     Is this meeting taking place?
@@ -338,7 +373,7 @@ export const RoomPage = observer(function RoomPage() {
               // A full-day reservation: nothing to count down to and nothing
               // to tap — the footer has no "Free up the room" for it either.
               <motion.div key="all-day" {...stateMotion(instant)} className={splitClass}>
-                <BusyHeadline instant={instant} title={room.current.title} halloween={halloween} />
+                <BusyHeadline instant={instant} title={room.current.title} season={season} />
                 <DetailPanel
                   icon={CalendarDays}
                   label="All day"
@@ -351,7 +386,7 @@ export const RoomPage = observer(function RoomPage() {
               </motion.div>
             ) : room.current ? (
               <motion.div key="busy" {...stateMotion(instant)} className={splitClass}>
-                <BusyHeadline instant={instant} title={room.current.title} halloween={halloween} />
+                <BusyHeadline instant={instant} title={room.current.title} season={season} />
                 <DetailPanel
                   icon={Timer}
                   label="Free in"
@@ -558,12 +593,12 @@ function CheckedInMark({ className }: { className?: string }) {
 function BusyHeadline({
   instant,
   title,
-  halloween,
+  season,
 }: {
   instant: boolean;
   title?: string;
-  /** Pumpkin orange with an ember glow, against the night sky. */
-  halloween?: boolean;
+  /** Colours the headline for the season (see `seasonLook`). */
+  season?: Season | null;
 }) {
   return (
     <div className={splitLeftClass}>
@@ -572,12 +607,15 @@ function BusyHeadline({
         {title && <p className={meetingNameClass}>{title}</p>}
         <motion.h1
           {...headlineMotion(instant)}
-          className={cn(
-            headlineClass,
-            halloween && 'text-pumpkin [text-shadow:0_0_0.3em_rgba(255,110,20,0.45)]',
-          )}
+          className={cn(headlineClass, season && seasonLook[season].headline)}
         >
-          Busy
+          {/* On April Fools' Day the word cannot keep still either. On its own
+              span: the h1's transform belongs to Motion. */}
+          {season === 'april-fools' ? (
+            <span className="inline-block animate-wobble">Busy</span>
+          ) : (
+            'Busy'
+          )}
         </motion.h1>
       </div>
     </div>

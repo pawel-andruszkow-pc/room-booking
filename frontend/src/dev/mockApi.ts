@@ -12,6 +12,11 @@
  * real tablets can use it, and none of them should ever end up on fake data.
  *
  * Scenarios: `busy` (default), `check-in`, `soon`, `free`, `all-day`.
+ *
+ * `?template=<season>` (with `?mock`) dresses the busy screen for that season
+ * whatever the date, and names the room and meetings to match:
+ * `valentines`, `womens-day`, `april-fools`, `halloween`, `santa`, `christmas`.
+ * It sticks for the tab too; `?template=off` goes back to the calendar.
  */
 import type {
   CalendarEvent,
@@ -22,8 +27,10 @@ import type {
   RoomState,
   RoomStatus,
 } from '@/types';
+import { forceSeason, isSeason, type Season } from '@/lib/season';
 
 const SESSION_KEY = 'rb.mock';
+const TEMPLATE_KEY = 'rb.mock.template';
 const MINUTE = 60_000;
 const BUSY_SOON_MS = 5 * MINUTE;
 const BACK_TO_BACK_TOLERANCE_MS = MINUTE;
@@ -49,6 +56,61 @@ function resolveScenario(): Scenario | null {
   }
 }
 
+/** Reads `?template` into sessionStorage and returns the season to force, if any. */
+function resolveTemplate(): Season | null {
+  const param = new URLSearchParams(window.location.search).get('template');
+  try {
+    if (param === 'off') sessionStorage.removeItem(TEMPLATE_KEY);
+    else if (isSeason(param)) sessionStorage.setItem(TEMPLATE_KEY, param);
+    const stored = sessionStorage.getItem(TEMPLATE_KEY);
+    return isSeason(stored) ? stored : null;
+  } catch {
+    return isSeason(param) ? param : null;
+  }
+}
+
+/** Room and meeting names: the current meeting, a later one, an all-day one. */
+type Names = { room: string; meetings: [string, string]; allDay: string };
+
+const PLAIN: Names = {
+  room: 'Library',
+  meetings: ['Design sync', 'Sprint retro'],
+  allDay: 'Team offsite',
+};
+
+const TEMPLATE_NAMES: Record<Season, Names> = {
+  valentines: {
+    room: 'Rose Garden',
+    meetings: ['Love letters sync', 'Cupid targeting review'],
+    allDay: 'Card-making workshop',
+  },
+  'womens-day': {
+    room: 'Tulip Room',
+    meetings: ['Flower delivery sync', 'Women in tech panel'],
+    allDay: "Women's Day celebration",
+  },
+  'april-fools': {
+    room: 'Whoopee Room',
+    meetings: ['Totally serious meeting', 'Prank post-mortem'],
+    allDay: 'Rubber duck debugging day',
+  },
+  halloween: {
+    room: 'Haunted Library',
+    meetings: ['Pumpkin carving sync', 'Witching hour retro'],
+    allDay: 'Haunted house build',
+  },
+  santa: {
+    room: 'Reindeer Stables',
+    meetings: ['Gift list review', 'Chimney logistics'],
+    allDay: "Santa's workshop day",
+  },
+  christmas: {
+    room: 'Fireplace Lounge',
+    meetings: ['Christmas party planning', 'Secret Santa draw'],
+    allDay: 'Tree decorating',
+  },
+};
+
 const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Warsaw';
 
 const settings: PublicSettings = {
@@ -63,7 +125,7 @@ const settings: PublicSettings = {
 
 const room: Room = {
   id: 'mock-room',
-  name: 'Haunted Library',
+  name: PLAIN.room,
   calendarId: 'mock-calendar',
   location: '6th floor',
   capacity: 6,
@@ -107,7 +169,8 @@ class MockCalendar {
   confirmed = new Set<string>();
   private seq = 0;
 
-  constructor(scenario: Scenario) {
+  constructor(scenario: Scenario, names: Names) {
+    const [first, later] = names.meetings;
     const now = Date.now() - (Date.now() % MINUTE);
     const add = (title: string, fromMin: number, toMin: number, confirmed = true) => {
       const e = event(`mock-${++this.seq}`, title, now + fromMin * MINUTE, now + toMin * MINUTE);
@@ -116,21 +179,21 @@ class MockCalendar {
     };
     switch (scenario) {
       case 'busy':
-        add('Pumpkin carving sync', -20, 40);
-        add('Witching hour retro', 90, 120);
+        add(first, -20, 40);
+        add(later, 90, 120);
         break;
       case 'check-in':
-        add('Pumpkin carving sync', -1, 45, false);
+        add(first, -1, 45, false);
         break;
       case 'soon':
-        add('Pumpkin carving sync', 4, 60, false);
+        add(first, 4, 60, false);
         break;
       case 'free':
-        add('Pumpkin carving sync', 60, 120, false);
+        add(first, 60, 120, false);
         break;
       case 'all-day': {
         const { start, end } = dayBounds(now);
-        this.events.push(event('mock-all-day', 'Haunted house build', start, end, true));
+        this.events.push(event('mock-all-day', names.allDay, start, end, true));
         break;
       }
     }
@@ -355,7 +418,11 @@ export function installMockApi(): void {
   const scenario = resolveScenario();
   if (!scenario) return;
 
-  const calendar = new MockCalendar(scenario);
+  const template = resolveTemplate();
+  if (template) forceSeason(template);
+  const names = template ? TEMPLATE_NAMES[template] : PLAIN;
+  room.name = names.room;
+  const calendar = new MockCalendar(scenario, names);
   const realFetch = window.fetch.bind(window);
 
   // The app only asks for a status once it holds credentials; any will do here.
@@ -387,5 +454,7 @@ export function installMockApi(): void {
     }
   };
 
-  console.info(`[mock] /api is mocked in this tab (scenario: ${scenario}). ?mock=off to stop.`);
+  console.info(
+    `[mock] /api is mocked in this tab (scenario: ${scenario}, template: ${template ?? 'none'}). ?mock=off to stop.`,
+  );
 }
