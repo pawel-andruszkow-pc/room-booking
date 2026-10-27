@@ -16,10 +16,79 @@
   --color-ink-3: #1a2540;
   --color-mist: #e2e8f0;
 
+  /* Halloween week: a busy room at night (see HalloweenScene) */
+  --color-halloween: #2a1040;
+  --color-pumpkin: #ff8a1f;
+
   --radius-xl2: 1.75rem;
 
   --animate-pulse-soft: pulse-soft 2.4s ease-in-out infinite;
   --animate-blink: blink 1s steps(2, start) infinite;
+  --animate-bat-fly: bat-fly 22s linear infinite;
+  --animate-bat-flap: bat-flap 0.3s ease-in-out infinite alternate;
+  --animate-spider: spider 4.5s ease-in-out infinite alternate;
+  --animate-fog: fog 16s ease-in-out infinite alternate;
+  --animate-candle: candle 2.8s linear infinite;
+
+  @keyframes bat-fly {
+    0% {
+      transform: translate(-12vw, 0);
+    }
+    25% {
+      transform: translate(18vw, 4vh);
+    }
+    50% {
+      transform: translate(48vw, -2vh);
+    }
+    75% {
+      transform: translate(80vw, 3vh);
+    }
+    100% {
+      transform: translate(112vw, 0);
+    }
+  }
+  @keyframes bat-flap {
+    to {
+      transform: scaleY(0.3);
+    }
+  }
+  @keyframes spider {
+    from {
+      transform: translateY(-3.5rem);
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+  @keyframes fog {
+    from {
+      transform: translateX(-4%);
+    }
+    to {
+      transform: translateX(4%);
+    }
+  }
+  @keyframes candle {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    18% {
+      opacity: 0.78;
+    }
+    22% {
+      opacity: 0.95;
+    }
+    47% {
+      opacity: 0.7;
+    }
+    52% {
+      opacity: 1;
+    }
+    76% {
+      opacity: 0.85;
+    }
+  }
 
   @keyframes pulse-soft {
     0%,

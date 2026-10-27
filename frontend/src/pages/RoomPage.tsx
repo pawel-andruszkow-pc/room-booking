@@ -20,7 +20,9 @@ import { useSecretTap } from '@/hooks/useSecretTap';
 import { Button } from '@/components/ui/button';
 import { Clock } from '@/components/Clock';
 import { TimerBadge } from '@/components/TimerBadge';
+import { HalloweenScene } from '@/components/HalloweenScene';
 import { Spinner } from '@/components/ui/spinner';
+import { seasonOn } from '@/lib/season';
 import { formatCountdown, formatCountdownMinutes, formatTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { roomIsFree } from '@/types';
@@ -134,7 +136,7 @@ const headlineMotion = (instant: boolean) => ({
 
 /** The kiosk screen: one room, its state, and the actions that make sense right now. */
 export const RoomPage = observer(function RoomPage() {
-  const { auth, device, room, toast } = useStores();
+  const { auth, clock, device, room, toast } = useStores();
   const navigate = useNavigate();
   useKiosk(device.isKiosk);
   const secretTap = useSecretTap(() => navigate('/settings'));
@@ -168,7 +170,19 @@ export const RoomPage = observer(function RoomPage() {
 
   const status = room.status;
   const tz = room.timezone;
-  const bg = !status ? 'bg-ink' : roomIsFree(state) ? 'bg-free' : 'bg-busy';
+  // Halloween week dresses the busy room for the night. Read off the minute,
+  // not the second, so the page does not re-render on every clock tick.
+  const halloween =
+    Boolean(status) &&
+    !roomIsFree(state) &&
+    seasonOn(new Date(clock.minute * 60_000)) === 'halloween';
+  const bg = !status
+    ? 'bg-ink'
+    : roomIsFree(state)
+      ? 'bg-free'
+      : halloween
+        ? 'bg-halloween'
+        : 'bg-busy';
   // A tap on this tablet switches the screen instantly; only changes that
   // arrive from the clock or the calendar get the free/busy animation.
   const instant = room.changedByUser;
@@ -189,6 +203,8 @@ export const RoomPage = observer(function RoomPage() {
     >
       {/* Depth without repaint cost: static radial gradient overlay. */}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_90%_at_10%_0%,rgba(255,255,255,0.18),transparent_55%),radial-gradient(90%_80%_at_100%_100%,rgba(0,0,0,0.22),transparent_60%)]" />
+
+      <AnimatePresence>{halloween && <HalloweenScene key="halloween" />}</AnimatePresence>
 
       {/* Dims everything except the footer buttons while confirming "Free up the room?". */}
       <AnimatePresence>
@@ -288,7 +304,7 @@ export const RoomPage = observer(function RoomPage() {
               </motion.div>
             ) : state === 'awaiting-check-in' && room.current ? (
               <motion.div key="check" {...stateMotion(instant)} className={splitClass}>
-                <BusyHeadline instant={instant} title={room.current.title} />
+                <BusyHeadline instant={instant} title={room.current.title} halloween={halloween} />
                 <div className={splitRightClass}>
                   <p className="text-[clamp(1.75rem,2.9vw,3.375rem)] font-bold leading-tight">
                     Is this meeting taking place?
@@ -322,7 +338,7 @@ export const RoomPage = observer(function RoomPage() {
               // A full-day reservation: nothing to count down to and nothing
               // to tap — the footer has no "Free up the room" for it either.
               <motion.div key="all-day" {...stateMotion(instant)} className={splitClass}>
-                <BusyHeadline instant={instant} title={room.current.title} />
+                <BusyHeadline instant={instant} title={room.current.title} halloween={halloween} />
                 <DetailPanel
                   icon={CalendarDays}
                   label="All day"
@@ -335,7 +351,7 @@ export const RoomPage = observer(function RoomPage() {
               </motion.div>
             ) : room.current ? (
               <motion.div key="busy" {...stateMotion(instant)} className={splitClass}>
-                <BusyHeadline instant={instant} title={room.current.title} />
+                <BusyHeadline instant={instant} title={room.current.title} halloween={halloween} />
                 <DetailPanel
                   icon={Timer}
                   label="Free in"
@@ -539,13 +555,28 @@ function CheckedInMark({ className }: { className?: string }) {
  * Left column of every busy state: the meeting `title` hangs above the state
  * word without moving it.
  */
-function BusyHeadline({ instant, title }: { instant: boolean; title?: string }) {
+function BusyHeadline({
+  instant,
+  title,
+  halloween,
+}: {
+  instant: boolean;
+  title?: string;
+  /** Pumpkin orange with an ember glow, against the night sky. */
+  halloween?: boolean;
+}) {
   return (
     <div className={splitLeftClass}>
       {/* Content-sized wrapper: the title hangs off the headline, not the column. */}
       <div className="relative">
         {title && <p className={meetingNameClass}>{title}</p>}
-        <motion.h1 {...headlineMotion(instant)} className={headlineClass}>
+        <motion.h1
+          {...headlineMotion(instant)}
+          className={cn(
+            headlineClass,
+            halloween && 'text-pumpkin [text-shadow:0_0_0.3em_rgba(255,110,20,0.45)]',
+          )}
+        >
           Busy
         </motion.h1>
       </div>
