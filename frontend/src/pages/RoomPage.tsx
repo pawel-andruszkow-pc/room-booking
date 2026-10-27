@@ -26,6 +26,7 @@ import { ChristmasScene } from '@/components/ChristmasScene';
 import { ValentinesScene } from '@/components/ValentinesScene';
 import { AprilFoolsScene } from '@/components/AprilFoolsScene';
 import { WomensDayScene } from '@/components/WomensDayScene';
+import { EasterScene } from '@/components/EasterScene';
 import { Spinner } from '@/components/ui/spinner';
 import { seasonOn, type Season } from '@/lib/season';
 import { formatCountdown, formatCountdownMinutes, formatTime } from '@/lib/time';
@@ -146,12 +147,14 @@ const headlineMotion = (instant: boolean) => ({
 const seasonLook: Record<Season, { bg: string; headline: string; Scene: ComponentType }> = {
   valentines: {
     bg: 'bg-valentines',
-    headline: 'text-valentines-pink [text-shadow:0_0_0.3em_rgba(255,80,140,0.45)]',
+    headline: 'text-valentines-pink [text-shadow:0_0_0.35em_rgba(255,255,255,0.3)]',
     Scene: ValentinesScene,
   },
   'womens-day': {
     bg: 'bg-womens-day',
-    headline: 'text-womens-day-lilac [text-shadow:0_0_0.3em_rgba(220,140,255,0.4)]',
+    // A dark shadow, not a glow: the illustration puts pale flowers behind the word.
+    headline:
+      'text-womens-day-blush [text-shadow:0_0.03em_0.08em_rgba(110,10,40,0.35),0_0.05em_0.35em_rgba(110,10,40,0.45)]',
     Scene: WomensDayScene,
   },
   'april-fools': {
@@ -159,15 +162,24 @@ const seasonLook: Record<Season, { bg: string; headline: string; Scene: Componen
     headline: 'text-april-fools-yellow [text-shadow:0.06em_0.06em_0_#ff5fa2]',
     Scene: AprilFoolsScene,
   },
-  // Pumpkin orange with an ember glow, against the night sky.
+  easter: {
+    bg: 'bg-easter',
+    headline:
+      'text-easter-cream [text-shadow:0_0.03em_0.08em_rgba(10,60,20,0.3),0_0.05em_0.35em_rgba(10,60,20,0.4)]',
+    Scene: EasterScene,
+  },
+  // Moonlight cream, not pumpkin orange: the picture has lit pumpkins and a
+  // lantern right behind the word.
   halloween: {
     bg: 'bg-halloween',
-    headline: 'text-pumpkin [text-shadow:0_0_0.3em_rgba(255,110,20,0.45)]',
+    headline:
+      'text-halloween-moon [text-shadow:0_0.03em_0.08em_rgba(10,5,30,0.4),0_0.05em_0.35em_rgba(10,5,30,0.5)]',
     Scene: HalloweenScene,
   },
   santa: {
     bg: 'bg-santa',
-    headline: 'text-santa-red [text-shadow:0_0_0.3em_rgba(255,90,90,0.45)]',
+    headline:
+      'text-santa-snow [text-shadow:0_0.03em_0.08em_rgba(90,5,20,0.3),0_0.05em_0.35em_rgba(90,5,20,0.4)]',
     Scene: SantaScene,
   },
   christmas: {
@@ -461,63 +473,63 @@ export const RoomPage = observer(function RoomPage() {
                     is the feedback. `mode="wait"` keeps them from overlapping,
                     which at this size would read as two buttons at once. */}
                 <AnimatePresence mode="wait" initial={false}>
-                {room.upcomingConfirmed ? (
-                  // Answered — and the confirmation is itself the way back out,
-                  // so the screen keeps one tap target where it had one button
-                  // rather than growing a second control beside it. The second
-                  // line has to say so: an undo nothing points at is an undo
-                  // nobody finds. Sized off the xl button it replaces, not off
-                  // the viewport, so it reads at the same weight as the tap
-                  // that got here (`size="xl"` is fixed at h-24 / text-3xl).
-                  <motion.button
-                    key="checked-in"
-                    type="button"
-                    aria-label="Cancel check-in"
-                    disabled={room.busy}
-                    onClick={() => act(room.cancelUpcoming)}
-                    className="flex h-24 items-center gap-5 rounded-3xl text-left transition-transform duration-150 ease-out select-none active:scale-[0.97] disabled:pointer-events-none"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0, transition: { duration: 0.1 } }}
-                    transition={{ duration: 0.13 }}
-                  >
-                    <CheckedInMark className="h-20 w-20 shrink-0 text-white" />
-                    {/* Trails the disc in from behind it, so the eye lands on
-                        the mark first and reads the words second. */}
-                    <motion.div
-                      className="min-w-0"
-                      initial={{ opacity: 0, x: -14 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.04, duration: 0.2, ease: 'easeOut' }}
-                    >
-                      <div className="truncate text-3xl font-bold leading-tight">
-                        You&apos;re checked in
-                      </div>
-                      <div className="truncate text-xl text-white/75">
-                        The room is held for you. Tap to cancel.
-                      </div>
-                    </motion.div>
-                  </motion.button>
-                ) : (
-                  // Shrinks away rather than just fading, so the white mass of
-                  // the pill reads as collapsing into the disc that replaces it.
-                  <motion.div
-                    key="confirm"
-                    initial={{ opacity: 0, scale: 0.94 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.88 }}
-                    transition={{ duration: 0.12, ease: 'easeOut' }}
-                  >
-                    <Button
-                      size="xl"
+                  {room.upcomingConfirmed ? (
+                    // Answered — and the confirmation is itself the way back out,
+                    // so the screen keeps one tap target where it had one button
+                    // rather than growing a second control beside it. The second
+                    // line has to say so: an undo nothing points at is an undo
+                    // nobody finds. Sized off the xl button it replaces, not off
+                    // the viewport, so it reads at the same weight as the tap
+                    // that got here (`size="xl"` is fixed at h-24 / text-3xl).
+                    <motion.button
+                      key="checked-in"
+                      type="button"
+                      aria-label="Cancel check-in"
                       disabled={room.busy}
-                      onClick={() => act(room.confirmUpcoming)}
+                      onClick={() => act(room.cancelUpcoming)}
+                      className="flex h-24 items-center gap-5 rounded-3xl text-left transition-transform duration-150 ease-out select-none active:scale-[0.97] disabled:pointer-events-none"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0, transition: { duration: 0.1 } }}
+                      transition={{ duration: 0.13 }}
                     >
-                      <Check className="h-9 w-9" />
-                      I&apos;m already here
-                    </Button>
-                  </motion.div>
-                )}
+                      <CheckedInMark className="h-20 w-20 shrink-0 text-white" />
+                      {/* Trails the disc in from behind it, so the eye lands on
+                        the mark first and reads the words second. */}
+                      <motion.div
+                        className="min-w-0"
+                        initial={{ opacity: 0, x: -14 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.04, duration: 0.2, ease: 'easeOut' }}
+                      >
+                        <div className="truncate text-3xl font-bold leading-tight">
+                          You&apos;re checked in
+                        </div>
+                        <div className="truncate text-xl text-white/75">
+                          The room is held for you. Tap to cancel.
+                        </div>
+                      </motion.div>
+                    </motion.button>
+                  ) : (
+                    // Shrinks away rather than just fading, so the white mass of
+                    // the pill reads as collapsing into the disc that replaces it.
+                    <motion.div
+                      key="confirm"
+                      initial={{ opacity: 0, scale: 0.94 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.88 }}
+                      transition={{ duration: 0.12, ease: 'easeOut' }}
+                    >
+                      <Button
+                        size="xl"
+                        disabled={room.busy}
+                        onClick={() => act(room.confirmUpcoming)}
+                      >
+                        <Check className="h-9 w-9" />
+                        I&apos;m already here
+                      </Button>
+                    </motion.div>
+                  )}
                 </AnimatePresence>
               </motion.div>
             )}

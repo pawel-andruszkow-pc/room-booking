@@ -15,7 +15,8 @@
  *
  * `?template=<season>` (with `?mock`) dresses the busy screen for that season
  * whatever the date, and names the room and meetings to match:
- * `valentines`, `womens-day`, `april-fools`, `halloween`, `santa`, `christmas`.
+ * `valentines`, `womens-day`, `april-fools`, `easter`, `halloween`, `santa`,
+ * `christmas`.
  * It sticks for the tab too; `?template=off` goes back to the calendar.
  */
 import type {
@@ -94,10 +95,15 @@ const TEMPLATE_NAMES: Record<Season, Names> = {
     meetings: ['Totally serious meeting', 'Prank post-mortem'],
     allDay: 'Rubber duck debugging day',
   },
+  easter: {
+    room: 'Bunny Burrow',
+    meetings: ['Egg hunt planning', 'Basket blessing sync'],
+    allDay: 'Easter egg painting',
+  },
   halloween: {
-    room: 'Haunted Library',
-    meetings: ['Pumpkin carving sync', 'Witching hour retro'],
-    allDay: 'Haunted house build',
+    room: 'Moonlit Porch',
+    meetings: ['Black cat stand-up', 'Trick-or-treat route review'],
+    allDay: 'Lantern lighting',
   },
   santa: {
     room: 'Reindeer Stables',

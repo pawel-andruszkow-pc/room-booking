@@ -69,6 +69,12 @@ export default defineConfig({
   server: {
     port: 3021,
     host: true,
+    // A browser download still in progress is locked on Windows, and watching
+    // it (say, a new picture saved straight into public/seasons) crashes the
+    // dev server with EBUSY.
+    watch: {
+      ignored: ['**/*.crdownload', '**/*.part', '**/*.tmp'],
+    },
     // Proxy API calls to the backend so tablets on the LAN can use the dev
     // server with a relative `/api` base (no CORS, no baked-in URL).
     proxy: {

@@ -67,11 +67,42 @@ export function Snowflake() {
   return <div className="aspect-square w-full rounded-full bg-white/80 blur-[1px]" />;
 }
 
+/** A heart in a 32×29 box: the dip between the lobes at (16, 4.9), the point at (16, 29). */
+export const HEART_PATH = 'M16 29 3.4 16.6A8.6 8.6 0 0 1 16 4.9a8.6 8.6 0 0 1 12.6 11.7Z';
+
 /** A heart, filled with `currentColor`. */
 export function Heart({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 32 29" className={cn('w-full fill-current', className)}>
-      <path d="M16 29 3.4 16.6A8.6 8.6 0 0 1 16 4.9a8.6 8.6 0 0 1 12.6 11.7Z" />
+      <path d={HEART_PATH} />
     </svg>
+  );
+}
+
+/**
+ * A bat flapping across the screen from left to right; `className` sets its
+ * height (top) and size (width).
+ */
+export function Bat({
+  className,
+  duration,
+  delay,
+}: {
+  className: string;
+  duration: number;
+  delay: number;
+}) {
+  const style = { animationDuration: `${duration}s`, animationDelay: `${delay}s` } as CSSProperties;
+  return (
+    <div className={`absolute left-0 animate-bat-fly ${className}`} style={style}>
+      <svg viewBox="0 0 64 32" className="w-full fill-[#120818]">
+        <g className="origin-center animate-bat-flap [transform-box:fill-box]">
+          <path d="M31 15C25 6 13 4 2 9c6 2 8 6 7 10 4-3 8-2 10 2 3-4 8-4 11-2Z" />
+          <path d="M33 15c6-9 18-11 29-6-6 2-8 6-7 10-4-3-8-2-10 2-3-4-8-4-11-2Z" />
+        </g>
+        <ellipse cx="32" cy="17" rx="4" ry="6" />
+        <path d="M29 12l1-4 2 3 2-3 1 4Z" />
+      </svg>
+    </div>
   );
 }

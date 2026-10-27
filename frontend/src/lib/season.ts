@@ -2,7 +2,7 @@ import { session } from './utils';
 
 /** Seasonal dressing for the busy screen. */
 export type Season =
-  'valentines' | 'womens-day' | 'april-fools' | 'halloween' | 'santa' | 'christmas';
+  'valentines' | 'womens-day' | 'april-fools' | 'easter' | 'halloween' | 'santa' | 'christmas';
 
 const SESSION_KEY = 'rb.theme';
 
@@ -45,11 +45,41 @@ function workingWeek(year: number, month: number, day: number): Window {
   };
 }
 
-/** Each season's window in a given year. No two of them overlap. */
+/**
+ * Easter Sunday in the Gregorian calendar (the anonymous algorithm, as given
+ * by Meeus): `month` is 0-based like Date's.
+ */
+export function easterSunday(year: number): { month: number; day: number } {
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const n = h + l - 7 * m + 114;
+  return { month: Math.floor(n / 31) - 1, day: (n % 31) + 1 };
+}
+
+/**
+ * Each season's window in a given year. Where two windows overlap the one
+ * listed first wins: Holy Week can take in 1 April, and then April Fools' Day
+ * has that one day.
+ */
 const SEASONS: Record<Season, (year: number) => Window> = {
   valentines: (year) => workingDay(year, 1, 14),
   'womens-day': (year) => workingDay(year, 2, 8),
   'april-fools': (year) => workingDay(year, 3, 1),
+  // Holy Week: the working week before Easter Sunday (Easter Monday is a day off).
+  easter: (year) => {
+    const { month, day } = easterSunday(year);
+    return workingWeek(year, month, day);
+  },
   halloween: (year) => workingWeek(year, 9, 31),
   // Mikołajki: Santa comes on St Nicholas' Day.
   santa: (year) => workingDay(year, 11, 6),

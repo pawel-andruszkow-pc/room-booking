@@ -16,21 +16,23 @@
   --color-ink-3: #1a2540;
   --color-mist: #e2e8f0;
 
-  /* Halloween week: a busy room at night (see HalloweenScene) */
+  /* Halloween week: a busy room at night (see HalloweenScene), then the headline */
   --color-halloween: #2a1040;
-  --color-pumpkin: #ff8a1f;
+  --color-halloween-moon: #fff1d6;
 
   /* The other seasons (see lib/season.ts): background, then the "Busy" headline */
-  --color-santa: #13224f;
-  --color-santa-red: #ff6b6b;
+  --color-santa: #bf2230;
+  --color-santa-snow: #fff1f1;
   --color-christmas: #0e3b2c;
   --color-christmas-gold: #ffd25e;
-  --color-valentines: #5c0f2f;
-  --color-valentines-pink: #ff8fb3;
+  --color-valentines: #c91a46;
+  --color-valentines-pink: #ffdbe5;
   --color-april-fools: #0b5563;
   --color-april-fools-yellow: #ffe14d;
-  --color-womens-day: #3f1d63;
-  --color-womens-day-lilac: #f0c4ff;
+  --color-easter: #3f9a4f;
+  --color-easter-cream: #fffbea;
+  --color-womens-day: #ec8590;
+  --color-womens-day-blush: #ffe6ea;
 
   --radius-xl2: 1.75rem;
 
@@ -38,20 +40,15 @@
   --animate-blink: blink 1s steps(2, start) infinite;
   --animate-bat-fly: bat-fly 22s linear infinite;
   --animate-bat-flap: bat-flap 0.3s ease-in-out infinite alternate;
-  --animate-spider: spider 4.5s ease-in-out infinite alternate;
-  --animate-fog: fog 16s ease-in-out infinite alternate;
-  --animate-candle: candle 2.8s linear infinite;
   --animate-fall: fall 14s linear infinite;
   --animate-rise: rise 16s linear infinite;
   --animate-sway: sway 4s ease-in-out infinite alternate;
   --animate-twinkle: twinkle 1.6s ease-in-out infinite alternate;
   --animate-sleigh: sleigh 24s linear infinite;
   --animate-bob: bob 1.2s ease-in-out infinite alternate;
-  --animate-heartbeat: heartbeat 1.6s ease-in-out infinite;
+  --animate-swing: swing 4s ease-in-out infinite alternate;
+  --animate-cat-blink: cat-blink 5.5s ease-in-out infinite;
   --animate-flip: flip 1.6s linear infinite;
-  --animate-peek: peek 9s ease-in-out infinite;
-  --animate-look: look 4.5s ease-in-out infinite;
-  --animate-stem: stem 3.2s ease-in-out infinite alternate;
   --animate-wobble: wobble 2.4s ease-in-out infinite alternate;
 
   @keyframes bat-fly {
@@ -74,43 +71,6 @@
   @keyframes bat-flap {
     to {
       transform: scaleY(0.3);
-    }
-  }
-  @keyframes spider {
-    from {
-      transform: translateY(-3.5rem);
-    }
-    to {
-      transform: translateY(0);
-    }
-  }
-  @keyframes fog {
-    from {
-      transform: translateX(-4%);
-    }
-    to {
-      transform: translateX(4%);
-    }
-  }
-  @keyframes candle {
-    0%,
-    100% {
-      opacity: 1;
-    }
-    18% {
-      opacity: 0.78;
-    }
-    22% {
-      opacity: 0.95;
-    }
-    47% {
-      opacity: 0.7;
-    }
-    52% {
-      opacity: 1;
-    }
-    76% {
-      opacity: 0.85;
     }
   }
 
@@ -166,17 +126,26 @@
       transform: translateY(0.4rem);
     }
   }
-  @keyframes heartbeat {
+  /* Eyes open most of the time, a quick blink near the end of each cycle.
+     `scale`, not `transform`, so the lid keeps its -translate-1/2. */
+  @keyframes cat-blink {
     0%,
-    40%,
+    90%,
     100% {
-      transform: scale(1);
+      scale: 1 0;
     }
-    15% {
-      transform: scale(1.1);
+    93%,
+    95% {
+      scale: 1 1;
     }
-    28% {
-      transform: scale(1.04);
+  }
+  /* A pendulum: pair with origin-top so it swings from where it hangs. */
+  @keyframes swing {
+    from {
+      transform: rotate(-3deg);
+    }
+    to {
+      transform: rotate(3deg);
     }
   }
   @keyframes flip {
@@ -188,43 +157,6 @@
     }
     100% {
       transform: rotate(360deg) scaleY(1);
-    }
-  }
-  /* Down out of sight most of the time, up for a look around now and then. */
-  @keyframes peek {
-    0%,
-    30%,
-    100% {
-      transform: translateY(100%);
-    }
-    42%,
-    86% {
-      transform: translateY(0);
-    }
-  }
-  @keyframes look {
-    0%,
-    100% {
-      transform: translate(0, 0);
-    }
-    20%,
-    35% {
-      transform: translate(-8px, -4px);
-    }
-    50%,
-    65% {
-      transform: translate(8px, -6px);
-    }
-    80% {
-      transform: translate(2px, 6px);
-    }
-  }
-  @keyframes stem {
-    from {
-      transform: rotate(-4deg);
-    }
-    to {
-      transform: rotate(4deg);
     }
   }
   @keyframes wobble {

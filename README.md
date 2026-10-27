@@ -56,7 +56,8 @@ pnpm start:dev         # http://localhost:3020/api
 The seed creates rooms **Yellow** (busy now), **Violet** (free, meeting in 45 min)
 and **Palmiarnia** (meeting just started → presence prompt). Re-run `pnpm seed`
 any time to reset the demo meetings around the current time; `pnpm seed -- --reset`
-also wipes rooms and devices.
+also wipes rooms and devices. To put a room into a specific state (or skip the
+backend entirely with `?mock`), see [`backend/README.md`](backend/README.md).
 
 ### 3. Frontend
 

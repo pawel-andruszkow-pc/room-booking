@@ -1,73 +1,46 @@
-import type { CSSProperties } from 'react';
 import { scatter } from '@/lib/scatter';
-import { Drift, SceneFrame } from './SceneParts';
-
-const PETALS = scatter(18, 13, [0.6, 1.1], [12, 19]);
-const PETAL_COLORS = ['#ffb3d1', '#ff7aa8', '#f5d0ff'];
-
-/** Tulips: [left %, height (vh), bloom color, sway delay s]. */
-const TULIPS: [number, number, string, number][] = [
-  [2, 20, '#ff4f7b', 0],
-  [6, 25, '#ffd23f', -1.1],
-  [10, 18, '#c86bff', -0.4],
-  [14, 23, '#ff4f7b', -2],
-  [18, 17, '#ff8fb3', -1.5],
-  [80, 18, '#ff8fb3', -0.8],
-  [84, 24, '#ffd23f', -1.9],
-  [88, 19, '#ff4f7b', -0.2],
-  [92, 26, '#c86bff', -1.3],
-  [96, 20, '#ff4f7b', -2.4],
-];
+import { Drift, Heart, SceneFrame } from './SceneParts';
 
 /**
- * Women's Day (8 March) on a busy room: tulips swaying in both corners and
- * petals drifting down. Sits behind the content and never takes a tap;
- * transforms and opacity only, like HalloweenScene.
+ * The illustration: a woman in profile with flowers in her long hair, more
+ * flowers along the bottom and up the right edge. A WebP of the source PNG
+ * next to it in public/seasons (1.7 MB → 80 KB).
+ */
+const ILLUSTRATION = `${import.meta.env.BASE_URL}seasons/womens-day.webp`;
+
+const PETALS = scatter(12, 13, [0.7, 1.4], [18, 26]);
+const PETAL_COLORS = ['#e8475f', '#f6a3ad', '#fcd3d3'];
+
+/**
+ * Women's Day (8 March) on a busy room: the illustration filling the screen,
+ * her hair behind the "Busy" headline, with petals and little hearts drifting
+ * down over it. Sits behind the content and never takes a tap; transforms and
+ * opacity only, like HalloweenScene.
  */
 export function WomensDayScene() {
   return (
     <SceneFrame>
+      {/* Wider screens lose a strip off the bottom rather than the flowers in
+          her hair; narrower ones keep her and lose some of the right edge. */}
+      <img
+        src={ILLUSTRATION}
+        alt=""
+        draggable={false}
+        decoding="async"
+        className="absolute inset-0 size-full object-cover object-[30%_20%]"
+      />
       <Drift pieces={PETALS}>
-        {(_, i) => (
-          <div
-            className="aspect-[3/4] w-full rounded-[60%_40%_60%_40%] opacity-80"
-            style={{ backgroundColor: PETAL_COLORS[i % PETAL_COLORS.length] }}
-          />
-        )}
+        {(_, i) =>
+          i % 3 === 2 ? (
+            <Heart className="text-[#e8475f]/70" />
+          ) : (
+            <div
+              className="aspect-[3/4] w-full rounded-[60%_40%_60%_40%] opacity-80"
+              style={{ backgroundColor: PETAL_COLORS[i % PETAL_COLORS.length] }}
+            />
+          )
+        }
       </Drift>
-      {TULIPS.map(([left, height, color, delay]) => (
-        <Tulip key={left} left={left} height={height} color={color} delay={delay} />
-      ))}
     </SceneFrame>
-  );
-}
-
-function Tulip({
-  left,
-  height,
-  color,
-  delay,
-}: {
-  left: number;
-  height: number;
-  color: string;
-  delay: number;
-}) {
-  const style = {
-    left: `${left}%`,
-    height: `${height}vh`,
-    animationDelay: `${delay}s`,
-  } as CSSProperties;
-  return (
-    <svg
-      viewBox="0 0 40 120"
-      preserveAspectRatio="xMidYMax meet"
-      className="absolute bottom-0 origin-bottom -translate-x-1/2 animate-stem"
-      style={style}
-    >
-      <path d="M20 120C20 90 18 70 20 36" stroke="#3f8f4a" strokeWidth="3" fill="none" />
-      <path d="M20 112C6 98 4 80 8 66c8 14 12 28 12 46Z" fill="#4caf5a" />
-      <path d="M10 20c0 18 20 18 20 0V5l-5 8-5-10-5 10-5-8Z" fill={color} />
-    </svg>
   );
 }
