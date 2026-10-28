@@ -24,6 +24,47 @@ export function SceneFrame({ children }: { children: ReactNode }) {
 }
 
 /**
+ * A season's illustration (a WebP in public/seasons) filling the screen like
+ * `object-cover`; `position` is the `object-position` class that says which
+ * part of it survives the crop.
+ */
+export function Illustration({ name, position }: { name: string; position: string }) {
+  return (
+    <img
+      src={`${import.meta.env.BASE_URL}seasons/${name}.webp`}
+      alt=""
+      draggable={false}
+      decoding="async"
+      className={cn('absolute inset-0 size-full object-cover', position)}
+    />
+  );
+}
+
+/**
+ * Keeps the white text readable over a bright illustration: a `tint` over the
+ * whole picture, deeper shade behind the headline, the countdown and the
+ * clock, and a gradient under the footer, all in one colour (`rgb`, as
+ * "r, g, b") picked from the picture's own shadows.
+ */
+export function Shade({ rgb, tint = 0.25 }: { rgb: string; tint?: number }) {
+  const shade = (alpha: number) => `rgba(${rgb}, ${alpha})`;
+  return (
+    <div
+      className="absolute inset-0"
+      style={{
+        background: [
+          `radial-gradient(50% 45% at 18% 52%, ${shade(0.5)}, transparent)`,
+          `radial-gradient(28% 32% at 66% 50%, ${shade(0.45)}, transparent)`,
+          `radial-gradient(22% 22% at 88% 12%, ${shade(0.55)}, transparent)`,
+          `linear-gradient(to top, ${shade(0.7)}, transparent 30%)`,
+          shade(tint),
+        ].join(', '),
+      }}
+    />
+  );
+}
+
+/**
  * Pieces falling from the top (snow, petals, confetti) or, with `rise`, floating
  * up from the bottom (hearts, balloons), each swaying on its own clock.
  */
@@ -68,7 +109,7 @@ export function Snowflake() {
 }
 
 /** A heart in a 32×29 box: the dip between the lobes at (16, 4.9), the point at (16, 29). */
-export const HEART_PATH = 'M16 29 3.4 16.6A8.6 8.6 0 0 1 16 4.9a8.6 8.6 0 0 1 12.6 11.7Z';
+const HEART_PATH = 'M16 29 3.4 16.6A8.6 8.6 0 0 1 16 4.9a8.6 8.6 0 0 1 12.6 11.7Z';
 
 /** A heart, filled with `currentColor`. */
 export function Heart({ className }: { className?: string }) {

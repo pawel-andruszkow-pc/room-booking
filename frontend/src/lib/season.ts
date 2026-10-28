@@ -2,7 +2,18 @@ import { session } from './utils';
 
 /** Seasonal dressing for the busy screen. */
 export type Season =
-  'valentines' | 'womens-day' | 'april-fools' | 'easter' | 'halloween' | 'santa' | 'christmas';
+  | 'grandma'
+  | 'paczki'
+  | 'valentines'
+  | 'womens-day'
+  | 'spring'
+  | 'april-fools'
+  | 'easter'
+  | 'kids'
+  | 'coders-day'
+  | 'halloween'
+  | 'santa'
+  | 'christmas';
 
 const SESSION_KEY = 'rb.theme';
 
@@ -68,18 +79,34 @@ export function easterSunday(year: number): { month: number; day: number } {
 
 /**
  * Each season's window in a given year. Where two windows overlap the one
- * listed first wins: Holy Week can take in 1 April, and then April Fools' Day
- * has that one day.
+ * listed first wins: Holy Week can take in 21 March or 1 April, and then the
+ * first day of spring or April Fools' Day has that one day.
  */
 const SEASONS: Record<Season, (year: number) => Window> = {
+  // Dzień Babci and Dzień Dziadka, one after the other.
+  grandma: (year) => ({
+    start: workingDay(year, 0, 21).start,
+    end: workingDay(year, 0, 22).end,
+  }),
+  // Tłusty Czwartek: the Thursday before Ash Wednesday, 52 days before Easter.
+  paczki: (year) => {
+    const { month, day } = easterSunday(year);
+    return workingDay(year, month, day - 52);
+  },
   valentines: (year) => workingDay(year, 1, 14),
   'womens-day': (year) => workingDay(year, 2, 8),
+  // Pierwszy dzień wiosny.
+  spring: (year) => workingDay(year, 2, 21),
   'april-fools': (year) => workingDay(year, 3, 1),
   // Holy Week: the working week before Easter Sunday (Easter Monday is a day off).
   easter: (year) => {
     const { month, day } = easterSunday(year);
     return workingWeek(year, month, day);
   },
+  // Dzień Dziecka.
+  kids: (year) => workingDay(year, 5, 1),
+  // Programmers' Day: the 256th day of the year (13 September, 12th in a leap year).
+  'coders-day': (year) => workingDay(year, 0, 256),
   halloween: (year) => workingWeek(year, 9, 31),
   // Mikołajki: Santa comes on St Nicholas' Day.
   santa: (year) => workingDay(year, 11, 6),

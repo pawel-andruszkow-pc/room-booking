@@ -33,6 +33,16 @@
   --color-easter-cream: #fffbea;
   --color-womens-day: #ec8590;
   --color-womens-day-blush: #ffe6ea;
+  --color-grandma: #a8582e;
+  --color-grandma-cream: #fff4e3;
+  --color-paczki: #8f4a24;
+  --color-paczki-icing: #ffe3ee;
+  --color-spring: #4f9a3a;
+  --color-spring-blossom: #fff0f5;
+  --color-kids: #2f8fd8;
+  --color-kids-sun: #fff6b8;
+  --color-coders-day: #2b2350;
+  --color-coders-day-green: #c8ffd6;
 
   --radius-xl2: 1.75rem;
 
@@ -43,10 +53,6 @@
   --animate-fall: fall 14s linear infinite;
   --animate-rise: rise 16s linear infinite;
   --animate-sway: sway 4s ease-in-out infinite alternate;
-  --animate-twinkle: twinkle 1.6s ease-in-out infinite alternate;
-  --animate-sleigh: sleigh 24s linear infinite;
-  --animate-bob: bob 1.2s ease-in-out infinite alternate;
-  --animate-swing: swing 4s ease-in-out infinite alternate;
   --animate-cat-blink: cat-blink 5.5s ease-in-out infinite;
   --animate-flip: flip 1.6s linear infinite;
   --animate-wobble: wobble 2.4s ease-in-out infinite alternate;
@@ -99,33 +105,6 @@
       transform: translateX(1.5vw) rotate(12deg);
     }
   }
-  @keyframes twinkle {
-    from {
-      opacity: 1;
-    }
-    to {
-      opacity: 0.35;
-    }
-  }
-  @keyframes sleigh {
-    0% {
-      transform: translate(-30vw, 6vh);
-    }
-    50% {
-      transform: translate(45vw, -2vh);
-    }
-    100% {
-      transform: translate(120vw, 3vh);
-    }
-  }
-  @keyframes bob {
-    from {
-      transform: translateY(-0.4rem);
-    }
-    to {
-      transform: translateY(0.4rem);
-    }
-  }
   /* Eyes open most of the time, a quick blink near the end of each cycle.
      `scale`, not `transform`, so the lid keeps its -translate-1/2. */
   @keyframes cat-blink {
@@ -137,15 +116,6 @@
     93%,
     95% {
       scale: 1 1;
-    }
-  }
-  /* A pendulum: pair with origin-top so it swings from where it hangs. */
-  @keyframes swing {
-    from {
-      transform: rotate(-3deg);
-    }
-    to {
-      transform: rotate(3deg);
     }
   }
   @keyframes flip {

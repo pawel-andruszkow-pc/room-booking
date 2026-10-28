@@ -27,6 +27,11 @@ import { ValentinesScene } from '@/components/ValentinesScene';
 import { AprilFoolsScene } from '@/components/AprilFoolsScene';
 import { WomensDayScene } from '@/components/WomensDayScene';
 import { EasterScene } from '@/components/EasterScene';
+import { GrandmaScene } from '@/components/GrandmaScene';
+import { PaczkiScene } from '@/components/PaczkiScene';
+import { SpringScene } from '@/components/SpringScene';
+import { KidsScene } from '@/components/KidsScene';
+import { CodersDayScene } from '@/components/CodersDayScene';
 import { Spinner } from '@/components/ui/spinner';
 import { seasonOn, type Season } from '@/lib/season';
 import { formatCountdown, formatCountdownMinutes, formatTime } from '@/lib/time';
@@ -145,6 +150,18 @@ const headlineMotion = (instant: boolean) => ({
  * and the scene behind the content.
  */
 const seasonLook: Record<Season, { bg: string; headline: string; Scene: ComponentType }> = {
+  grandma: {
+    bg: 'bg-grandma',
+    headline:
+      'text-grandma-cream [text-shadow:0_0.03em_0.08em_rgba(70,25,10,0.4),0_0.05em_0.35em_rgba(70,25,10,0.5)]',
+    Scene: GrandmaScene,
+  },
+  paczki: {
+    bg: 'bg-paczki',
+    headline:
+      'text-paczki-icing [text-shadow:0_0.03em_0.08em_rgba(60,22,8,0.45),0_0.05em_0.35em_rgba(60,22,8,0.55)]',
+    Scene: PaczkiScene,
+  },
   valentines: {
     bg: 'bg-valentines',
     headline: 'text-valentines-pink [text-shadow:0_0_0.35em_rgba(255,255,255,0.3)]',
@@ -157,6 +174,12 @@ const seasonLook: Record<Season, { bg: string; headline: string; Scene: Componen
       'text-womens-day-blush [text-shadow:0_0.03em_0.08em_rgba(110,10,40,0.35),0_0.05em_0.35em_rgba(110,10,40,0.45)]',
     Scene: WomensDayScene,
   },
+  spring: {
+    bg: 'bg-spring',
+    headline:
+      'text-spring-blossom [text-shadow:0_0.03em_0.08em_rgba(15,40,60,0.4),0_0.05em_0.35em_rgba(15,40,60,0.5)]',
+    Scene: SpringScene,
+  },
   'april-fools': {
     bg: 'bg-april-fools',
     headline: 'text-april-fools-yellow [text-shadow:0.06em_0.06em_0_#ff5fa2]',
@@ -167,6 +190,18 @@ const seasonLook: Record<Season, { bg: string; headline: string; Scene: Componen
     headline:
       'text-easter-cream [text-shadow:0_0.03em_0.08em_rgba(10,60,20,0.3),0_0.05em_0.35em_rgba(10,60,20,0.4)]',
     Scene: EasterScene,
+  },
+  kids: {
+    bg: 'bg-kids',
+    headline:
+      'text-kids-sun [text-shadow:0_0.03em_0.08em_rgba(10,35,70,0.4),0_0.05em_0.35em_rgba(10,35,70,0.5)]',
+    Scene: KidsScene,
+  },
+  'coders-day': {
+    bg: 'bg-coders-day',
+    headline:
+      'text-coders-day-green [text-shadow:0_0.03em_0.08em_rgba(20,13,46,0.45),0_0.05em_0.35em_rgba(20,13,46,0.55)]',
+    Scene: CodersDayScene,
   },
   // Moonlight cream, not pumpkin orange: the picture has lit pumpkins and a
   // lantern right behind the word.

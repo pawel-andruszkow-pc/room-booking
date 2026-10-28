@@ -35,8 +35,9 @@ http://localhost:3021/?mock=<scenario>
 - Only on `localhost` / `127.0.0.1` — a tablet reaching the dev server over the
   LAN never gets fake data — and never in a production build.
 - Add `?template=<season>` to force a seasonal look with matching room and
-  meeting names: `valentines`, `womens-day`, `april-fools`, `easter`,
-  `halloween`, `santa`, `christmas`. Example:
+  meeting names: `grandma`, `paczki`, `valentines`, `womens-day`, `spring`,
+  `april-fools`, `easter`, `kids`, `coders-day`, `halloween`, `santa`,
+  `christmas`. Example:
   `http://localhost:3021/?mock=busy&template=halloween`.
 - `?template=off` drops the forced season and goes back to the calendar, so
   during a real season (e.g. Halloween week) you still see that theme. For no
