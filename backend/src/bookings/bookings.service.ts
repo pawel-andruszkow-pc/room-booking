@@ -526,13 +526,12 @@ export class BookingsService {
       where: { roomId: room.id, eventId: current.id },
     });
 
-    // The calendar has moved on since this record was written: it answers a
-    // question about a meeting that no longer looks like this one. Forget it
-    // and treat the meeting as seen for the first time.
-    if (record && isStaleCheckIn(record, current, now)) {
+    // The meeting was moved while its prompt was open: forget the prompt and
+    // treat the meeting as seen for the first time.
+    if (record && isStaleCheckIn(record, current)) {
       this.logger.log(
-        `Resetting stale check-in for "${current.title}" in ${room.name} ` +
-          '(the event changed in the calendar after it was recorded)',
+        `Resetting check-in for "${current.title}" in ${room.name} ` +
+          '(the meeting was moved while its prompt was open)',
       );
       await this.checkIns.delete({ id: record.id });
       record = null;
@@ -745,33 +744,17 @@ function checkInDeadline(event: CalendarEvent, checkInMinutes: number): Date {
 }
 
 /**
- * A release shortens the event to the moment it happened (or makes the room
- * decline it, which hides it). Seeing the event still running this long after
- * the release is no longer the calendar catching up — someone has booked it
- * again (extended it, moved it, re-invited the room).
+ * True when an open presence prompt belongs to a start the meeting no longer
+ * has. The deadline follows the new start, so a meeting moved earlier while
+ * its prompt was open would otherwise be released the instant it was saved,
+ * before anyone could answer. Answered records (confirmed or released) stay.
  */
-const RELEASE_LAG_MS = 2 * 60_000;
-
-/**
- * True when a check-in record no longer describes `event` as the calendar has
- * it now:
- *  - it was released, but the calendar kept (or put back) the meeting well
- *    after the release — honouring the old release would show the room free
- *    under a meeting that is plainly on, for the rest of the day;
- *  - its prompt is still open, but the meeting has since been moved. The
- *    deadline is counted from the new start, so moving a meeting earlier would
- *    otherwise release it the instant it was saved, before anyone could answer.
- * A confirmed record stays: somebody said they are here, and a moved meeting
- * does not change that.
- */
-function isStaleCheckIn(record: CheckIn, event: CalendarEvent, now: Date): boolean {
-  if (record.releasedAt) {
-    return now.getTime() - record.releasedAt.getTime() > RELEASE_LAG_MS;
-  }
-  if (!record.confirmedAt) {
-    return record.eventStartsAt.getTime() !== toDate(event.start).getTime();
-  }
-  return false;
+function isStaleCheckIn(record: CheckIn, event: CalendarEvent): boolean {
+  return (
+    !record.confirmedAt &&
+    !record.releasedAt &&
+    record.eventStartsAt.getTime() !== toDate(event.start).getTime()
+  );
 }
 
 function toDate(iso: string): Date {

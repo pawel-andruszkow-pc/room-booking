@@ -143,9 +143,7 @@ export class GoogleCalendarProvider implements CalendarProvider {
     }
 
     return items
-      .filter(
-        (item) => item.status !== 'cancelled' && !isDeclinedByRoom(item, calendarId),
-      )
+      .filter((item) => item.status !== 'cancelled' && !isDeclinedByRoom(item))
       .map((item) => toCalendarEvent(item, timeZone))
       .filter((event): event is CalendarEvent => event !== null);
   }
@@ -279,10 +277,8 @@ function toSummary(item: calendar_v3.Schema$CalendarListEntry): CalendarSummary 
 }
 
 /** Resource calendars keep events the room itself declined; those never block the room. */
-function isDeclinedByRoom(item: calendar_v3.Schema$Event, calendarId: string): boolean {
-  return (item.attendees ?? []).some(
-    (a) => (a.self || a.email === calendarId) && a.responseStatus === 'declined',
-  );
+function isDeclinedByRoom(item: calendar_v3.Schema$Event): boolean {
+  return (item.attendees ?? []).some((a) => a.self && a.responseStatus === 'declined');
 }
 
 function isNotFound(err: unknown): boolean {
