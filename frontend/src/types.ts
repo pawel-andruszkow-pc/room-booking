@@ -12,6 +12,8 @@ export interface CalendarEvent {
   isAllDay: boolean;
   source: CalendarSource;
   htmlLink: string | null;
+  /** When the event was put in the calendar (ISO), if known. */
+  created: string | null;
 }
 
 export interface Room {

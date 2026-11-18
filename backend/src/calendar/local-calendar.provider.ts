@@ -109,5 +109,6 @@ function toCalendarEvent(row: LocalEvent): CalendarEvent {
     isAllDay: row.isAllDay,
     source: 'local',
     htmlLink: null,
+    created: row.createdAt.toISOString(),
   };
 }

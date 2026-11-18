@@ -182,6 +182,7 @@ function event(
     isAllDay,
     source: 'local',
     htmlLink: null,
+    created: null,
   };
 }
 

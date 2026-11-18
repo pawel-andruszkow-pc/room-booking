@@ -520,11 +520,23 @@ export class BookingsService {
     settings: AppSettings,
     opts: StatusOptions,
   ): Promise<{ released: boolean; status: RoomStatus['checkIn'] }> {
-    const deadline = addMinutes(toDate(current.start), settings.checkInMinutes);
+    const deadline = checkInDeadline(current, settings.checkInMinutes);
     const deadlineIso = deadline.toISOString();
     let record = await this.checkIns.findOne({
       where: { roomId: room.id, eventId: current.id },
     });
+
+    // The calendar has moved on since this record was written: it answers a
+    // question about a meeting that no longer looks like this one. Forget it
+    // and treat the meeting as seen for the first time.
+    if (record && isStaleCheckIn(record, current, now)) {
+      this.logger.log(
+        `Resetting stale check-in for "${current.title}" in ${room.name} ` +
+          '(the event changed in the calendar after it was recorded)',
+      );
+      await this.checkIns.delete({ id: record.id });
+      record = null;
+    }
 
     if (!record) {
       if (!opts.fromDevice) {
@@ -717,6 +729,49 @@ function busyBlockEnd(current: CalendarEvent, events: CalendarEvent[]): Date {
     if (toDate(event.end) > end) end = toDate(event.end);
   }
   return end;
+}
+
+/**
+ * When an unanswered presence prompt for `event` releases the room. Counted
+ * from the start — or from when the event was put in the calendar, if that was
+ * later: a meeting booked at 11:00 for 9:00–17:00 is on as of 11:00, and must
+ * not be released the moment it appears because its start is long gone.
+ * Mirrored by `projectCheckIn` in the tablet's RoomStore.
+ */
+function checkInDeadline(event: CalendarEvent, checkInMinutes: number): Date {
+  const start = toDate(event.start);
+  const created = event.created ? toDate(event.created) : null;
+  return addMinutes(created && created > start ? created : start, checkInMinutes);
+}
+
+/**
+ * A release shortens the event to the moment it happened (or makes the room
+ * decline it, which hides it). Seeing the event still running this long after
+ * the release is no longer the calendar catching up — someone has booked it
+ * again (extended it, moved it, re-invited the room).
+ */
+const RELEASE_LAG_MS = 2 * 60_000;
+
+/**
+ * True when a check-in record no longer describes `event` as the calendar has
+ * it now:
+ *  - it was released, but the calendar kept (or put back) the meeting well
+ *    after the release — honouring the old release would show the room free
+ *    under a meeting that is plainly on, for the rest of the day;
+ *  - its prompt is still open, but the meeting has since been moved. The
+ *    deadline is counted from the new start, so moving a meeting earlier would
+ *    otherwise release it the instant it was saved, before anyone could answer.
+ * A confirmed record stays: somebody said they are here, and a moved meeting
+ * does not change that.
+ */
+function isStaleCheckIn(record: CheckIn, event: CalendarEvent, now: Date): boolean {
+  if (record.releasedAt) {
+    return now.getTime() - record.releasedAt.getTime() > RELEASE_LAG_MS;
+  }
+  if (!record.confirmedAt) {
+    return record.eventStartsAt.getTime() !== toDate(event.start).getTime();
+  }
+  return false;
 }
 
 function toDate(iso: string): Date {

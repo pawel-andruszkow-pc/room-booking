@@ -661,7 +661,13 @@ function projectCheckIn(s: RoomStatus, current: CalendarEvent | null, at: number
   if (!current || current.isAllDay) return null;
   if (current.id === s.current?.id) return s.checkIn;
   if (!s.settings.checkInEnabled) return null;
-  const deadline = new Date(current.start).getTime() + s.settings.checkInMinutes * 60_000;
+  // Counted from the start, or from when the event was booked if that was
+  // later — mirrors checkInDeadline in the backend's BookingsService.
+  const opened = Math.max(
+    new Date(current.start).getTime(),
+    current.created ? new Date(current.created).getTime() : -Infinity,
+  );
+  const deadline = opened + s.settings.checkInMinutes * 60_000;
   // Answered before it started ("I'm already here"), so it opens as busy. The
   // backend agrees; without this the screen would flash the prompt for the
   // round-trip it takes to say so.
@@ -696,6 +702,7 @@ function predictBooked(
     isAllDay: false,
     source: s.events[0]?.source ?? 'local',
     htmlLink: null,
+    created: start,
   };
   return {
     ...s,

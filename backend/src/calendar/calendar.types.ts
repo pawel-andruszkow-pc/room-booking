@@ -12,6 +12,12 @@ export interface CalendarEvent {
   isAllDay: boolean;
   source: CalendarSource;
   htmlLink: string | null;
+  /**
+   * When the event was first put in the calendar (ISO), if the provider says.
+   * A meeting booked after it had already started gets its presence prompt
+   * counted from here rather than from its start.
+   */
+  created: string | null;
 }
 
 export interface CreateEventInput {
